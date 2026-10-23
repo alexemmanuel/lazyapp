@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Outfit", "Inter", system-ui, sans-serif;
+  --color-background: #0d0f18;
+  --color-foreground: #f4f6fc;
+  --color-card: #131724;
+  --color-card-foreground: #f4f6fc;
+  --color-card-border: #1e2438;
+  --color-sidebar: #090b12;
+  --color-sidebar-foreground: #e1e5f2;
+  --color-sidebar-border: #191e30;
+  --color-sidebar-accent: #191f33;
+  --color-border: #1e2438;
+  --color-muted: #151928;
+  --color-muted-foreground: #8b95b5;
+  --color-primary: #7c66f5;
+  --color-primary-foreground: #ffffff;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  overflow-x: hidden;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #252c46;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #394268;
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.88;
+    transform: scale(1.01);
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s ease-in-out infinite;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Lazy App",
+  "description": "The ultimate hyper-minimalist lazy utility: compare stay and ride prices across platforms, find 3-ingredient foolproof recipes from your fridge, dispatch verified local artisans, and run automated timers with LazyAI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
