@@ -7,6 +7,7 @@ import {
   formatCurrency,
   formatDistance,
   getIdentityVerificationBadge,
+  detectCountryInQuery,
   ALL_COUNTRIES,
   LOADING_STEPS_NG,
   LOADING_STEPS_US,
@@ -16,6 +17,7 @@ import {
 } from '../data/constants';
 import { ServiceItem, ApartmentItem, ReportTarget } from '../types';
 import { ReportListingModal } from '../components/ReportListingModal';
+import { VoiceButton } from '../components/VoiceButton';
 import {
   Compass,
   Search,
@@ -34,11 +36,15 @@ import {
   Star,
   CheckCircle2,
   ExternalLink,
+  Lock,
+  Ban,
+  Bell,
+  Bed,
 } from 'lucide-react';
 
 export function ComparePage() {
   const { isPremium, trySearch, openUpgrade } = usePremium();
-  const { region, setRegion, isOnline, countryInfo } = useRegion();
+  const { region, setRegion, isOnline, countryInfo, detectedCountry } = useRegion();
 
   const [activeTab, setActiveTab] = useState<'services' | 'apartments'>('services');
 
@@ -97,6 +103,45 @@ export function ComparePage() {
   const [apartmentStep, setApartmentStep] = useState(0);
   const [apartmentSort, setApartmentSort] = useState<'price' | 'distance'>('price');
   const [safeOnly, setSafeOnly] = useState(false);
+  const [occupancyFilter, setOccupancyFilter] = useState<'all' | 'available' | 'filled_up'>('all');
+  const [waitlistedApts, setWaitlistedApts] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('lazyWaitlistedApts');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleJoinWaitlist = (apt: ApartmentItem) => {
+    const isAlready = waitlistedApts.includes(apt.id);
+    let updated: string[];
+    if (isAlready) {
+      updated = waitlistedApts.filter((id) => id !== apt.id);
+      window.dispatchEvent(
+        new CustomEvent('lazy:push-notification', {
+          detail: {
+            message: `Removed from waitlist for ${apt.name}.`,
+          },
+        })
+      );
+    } else {
+      updated = [...waitlistedApts, apt.id];
+      window.dispatchEvent(
+        new CustomEvent('lazy:push-notification', {
+          detail: {
+            message: `🔔 Joined priority waitlist for ${apt.name}! We'll immediately alert you if a guest cancels or space opens up.`,
+          },
+        })
+      );
+    }
+    setWaitlistedApts(updated);
+    try {
+      localStorage.setItem('lazyWaitlistedApts', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+  };
 
   // Country select dropdown
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
@@ -165,6 +210,22 @@ export function ComparePage() {
   const handleRunServiceSearch = (q: string = serviceQuery) => {
     const query = q.trim();
     if (!query) return;
+
+    // Check if query points to another country
+    const targetCountry = detectCountryInQuery(query);
+    if (targetCountry && targetCountry !== region) {
+      if (!isPremium && targetCountry !== detectedCountry) {
+        const msg = `🔒 Free access is locked to your detected country (${countryInfo.name}). Upgrade to Core to search other countries & regions worldwide.`;
+        window.dispatchEvent(
+          new CustomEvent('lazy:push-notification', { detail: { message: msg } })
+        );
+        openUpgrade();
+        return;
+      } else {
+        setRegion(targetCountry);
+      }
+    }
+
     if (!trySearch()) return;
 
     setServiceStatus('loading');
@@ -192,6 +253,22 @@ export function ComparePage() {
   const handleRunApartmentSearch = (city: string = apartmentCity) => {
     const c = city.trim();
     if (!c) return;
+
+    // Check if apartment city points to another country
+    const targetCountry = detectCountryInQuery(c);
+    if (targetCountry && targetCountry !== region) {
+      if (!isPremium && targetCountry !== detectedCountry) {
+        const msg = `🔒 Free access is locked to your detected country (${countryInfo.name}). Upgrade to Core to search stays in other countries & regions.`;
+        window.dispatchEvent(
+          new CustomEvent('lazy:push-notification', { detail: { message: msg } })
+        );
+        openUpgrade();
+        return;
+      } else {
+        setRegion(targetCountry);
+      }
+    }
+
     if (!trySearch()) return;
 
     setApartmentStatus('loading');
@@ -260,8 +337,21 @@ export function ComparePage() {
       : null;
 
   // Filter & sort apartments
+  const totalApartments = apartmentResults.length;
+  const vacantApartmentsCount = apartmentResults.filter(
+    (a) => a.occupancyStatus !== 'filled_up'
+  ).length;
+  const filledUpApartmentsCount = apartmentResults.filter(
+    (a) => a.occupancyStatus === 'filled_up'
+  ).length;
+
   const filteredApartments = apartmentResults
     .filter((a) => (!safeOnly ? true : a.isIdentityVerified && a.safetyScore >= 95))
+    .filter((a) => {
+      if (occupancyFilter === 'available') return a.occupancyStatus !== 'filled_up';
+      if (occupancyFilter === 'filled_up') return a.occupancyStatus === 'filled_up';
+      return true;
+    })
     .slice()
     .sort((a, b) =>
       apartmentSort === 'price'
@@ -298,11 +388,25 @@ export function ComparePage() {
           >
             <span className="text-base">{countryInfo.flag}</span>
             <span>{countryInfo.name}</span>
+            {!isPremium && (
+              <span className="px-1.5 py-0.5 rounded-md bg-muted/60 text-[9px] text-muted-foreground font-semibold">
+                Free ({detectedCountry})
+              </span>
+            )}
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground ml-1" />
           </button>
 
           {countryDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl border border-border/60 bg-card/95 p-2 shadow-2xl shadow-black/60 backdrop-blur-xl z-50 animate-in zoom-in-95 duration-150">
+            <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-border/60 bg-card/95 p-2.5 shadow-2xl shadow-black/60 backdrop-blur-xl z-50 animate-in zoom-in-95 duration-150">
+              {!isPremium && (
+                <div className="mb-2 p-2 rounded-xl bg-violet-500/10 border border-violet-500/20 text-[11px] text-violet-300 flex items-start gap-1.5">
+                  <Lock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-violet-400" />
+                  <span>
+                    Free access is limited to your detected country (<strong>{detectedCountry}</strong>). Upgrade to Core to search worldwide.
+                  </span>
+                </div>
+              )}
+
               <input
                 type="text"
                 placeholder="Search country..."
@@ -315,31 +419,57 @@ export function ComparePage() {
                   (c) =>
                     c.name.toLowerCase().includes(countryFilter.toLowerCase()) ||
                     c.code.toLowerCase().includes(countryFilter.toLowerCase())
-                ).map((c) => (
-                  <button
-                    key={c.code}
-                    type="button"
-                    onClick={() => {
-                      setRegion(c.code);
-                      setCountryDropdownOpen(false);
-                      setServiceStatus('idle');
-                      setServiceResults([]);
-                      setApartmentStatus('idle');
-                      setApartmentResults([]);
-                    }}
-                    className={`flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs text-left transition-colors ${
-                      region === c.code
-                        ? 'bg-violet-500/15 text-violet-300 font-bold'
-                        : 'text-foreground/80 hover:bg-muted/40'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span>{c.flag}</span>
-                      <span className="truncate max-w-[150px]">{c.name}</span>
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">{c.code}</span>
-                  </button>
-                ))}
+                ).map((c) => {
+                  const isLocked = !isPremium && c.code !== detectedCountry;
+                  const isCurrent = region === c.code;
+
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => {
+                        if (isLocked) {
+                          setCountryDropdownOpen(false);
+                          setRegion(c.code);
+                          return;
+                        }
+                        setRegion(c.code);
+                        setCountryDropdownOpen(false);
+                        setServiceStatus('idle');
+                        setServiceResults([]);
+                        setApartmentStatus('idle');
+                        setApartmentResults([]);
+                      }}
+                      className={`flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs text-left transition-colors ${
+                        isCurrent
+                          ? 'bg-violet-500/15 text-violet-300 font-bold'
+                          : isLocked
+                          ? 'text-foreground/50 hover:bg-muted/30 cursor-pointer'
+                          : 'text-foreground/80 hover:bg-muted/40'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{c.flag}</span>
+                        <span className="truncate max-w-[130px]">{c.name}</span>
+                        {c.code === detectedCountry && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                            Home
+                          </span>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {isLocked ? (
+                          <span className="flex items-center gap-1 text-[10px] text-violet-400/80 font-bold">
+                            <Lock className="h-3 w-3" />
+                            <span>PRO</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">{c.code}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -396,6 +526,15 @@ export function ComparePage() {
                   value={serviceQuery}
                   onChange={(e) => setServiceQuery(e.target.value)}
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+                />
+                <VoiceButton
+                  onTranscript={(transcript) => {
+                    setServiceQuery(transcript);
+                    handleRunServiceSearch(transcript);
+                  }}
+                  size="sm"
+                  title="Speak search query"
+                  className="hover:bg-muted/60"
                 />
               </div>
               <button
@@ -641,6 +780,15 @@ export function ComparePage() {
                   onChange={(e) => setApartmentCity(e.target.value)}
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
+                <VoiceButton
+                  onTranscript={(transcript) => {
+                    setApartmentCity(transcript);
+                    handleRunApartmentSearch(transcript);
+                  }}
+                  size="sm"
+                  title="Speak destination city"
+                  className="hover:bg-muted/60"
+                />
               </div>
               <button
                 type="submit"
@@ -709,12 +857,50 @@ export function ComparePage() {
           {/* Results */}
           {apartmentStatus === 'results' && (
             <div className="space-y-4">
-              {/* Sort header */}
-              <div className="flex items-center justify-between p-3 rounded-2xl border border-border/40 bg-card/60 text-xs">
-                <span className="text-muted-foreground font-medium">
-                  {filteredApartments.length} stays found in {apartmentCity}
-                </span>
-                <div className="flex items-center gap-2">
+              {/* Filter & Sort Bar */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-2xl border border-border/40 bg-card/60 text-xs">
+                {/* Occupancy Filter Tabs */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-muted-foreground mr-1 font-medium">Availability:</span>
+                  <button
+                    type="button"
+                    onClick={() => setOccupancyFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      occupancyFilter === 'all'
+                        ? 'bg-violet-600 text-white shadow-sm shadow-violet-600/20'
+                        : 'bg-muted/30 border border-border/40 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    All Stays ({totalApartments})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOccupancyFilter('available')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      occupancyFilter === 'available'
+                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                        : 'bg-muted/30 border border-border/40 text-muted-foreground hover:text-emerald-300'
+                    }`}
+                  >
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                    Vacancies Only ({vacantApartmentsCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOccupancyFilter('filled_up')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      occupancyFilter === 'filled_up'
+                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/20'
+                        : 'bg-muted/30 border border-border/40 text-muted-foreground hover:text-rose-300'
+                    }`}
+                  >
+                    <span className="h-2 w-2 rounded-full bg-rose-400" />
+                    No Space / Filled Up ({filledUpApartmentsCount})
+                  </button>
+                </div>
+
+                {/* Sort controls */}
+                <div className="flex items-center gap-2 self-end lg:self-auto">
                   <span className="text-muted-foreground">Sort:</span>
                   <button
                     type="button"
@@ -741,100 +927,212 @@ export function ComparePage() {
                 </div>
               </div>
 
+              {/* Empty state if filter yields 0 */}
+              {filteredApartments.length === 0 && (
+                <div className="rounded-3xl border border-dashed border-border/60 p-8 text-center bg-card/40">
+                  <Ban className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-foreground">No stays match this filter</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Try switching back to "All Stays" or search another city destination.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOccupancyFilter('all')}
+                    className="mt-3 px-4 py-1.5 rounded-xl bg-violet-600 text-white text-xs font-semibold"
+                  >
+                    Show All Stays
+                  </button>
+                </div>
+              )}
+
               {/* Apartment Cards Grid */}
               <div className="grid md:grid-cols-2 gap-4">
-                {filteredApartments.map((apt) => (
-                  <div
-                    key={apt.id}
-                    className="p-5 rounded-3xl border border-border/50 bg-card/90 flex flex-col justify-between transition-all hover:border-violet-500/30"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl">{apt.emoji}</span>
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {apt.platform}
+                {filteredApartments.map((apt) => {
+                  const isFilledUp = apt.occupancyStatus === 'filled_up';
+                  const isFewLeft = apt.occupancyStatus === 'few_left';
+                  const isWaitlisted = waitlistedApts.includes(apt.id);
+
+                  return (
+                    <div
+                      key={apt.id}
+                      className={`p-5 rounded-3xl border flex flex-col justify-between transition-all ${
+                        isFilledUp
+                          ? 'border-rose-500/30 bg-card/90 hover:border-rose-500/50 shadow-md shadow-rose-950/10'
+                          : isFewLeft
+                          ? 'border-amber-500/30 bg-card/90 hover:border-amber-500/50'
+                          : 'border-border/50 bg-card/90 hover:border-violet-500/30'
+                      }`}
+                    >
+                      <div>
+                        {/* Occupancy Status Banner */}
+                        {isFilledUp ? (
+                          <div className="mb-3 px-3 py-2 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-between text-rose-300">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-500/25 text-rose-400">
+                                <Ban className="h-3.5 w-3.5" />
+                              </span>
+                              <div>
+                                <p className="text-xs font-bold leading-tight">FILLED UP · NO SPACE</p>
+                                <p className="text-[10px] text-rose-300/80">0 rooms currently available</p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-200">
+                              Waitlist Open
                             </span>
-                            <h3 className="font-display text-sm font-bold text-foreground leading-snug">
-                              {apt.name}
-                            </h3>
+                          </div>
+                        ) : isFewLeft ? (
+                          <div className="mb-3 px-3 py-2 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between text-amber-300">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/25 text-amber-400">
+                                <Sparkles className="h-3.5 w-3.5" />
+                              </span>
+                              <div>
+                                <p className="text-xs font-bold leading-tight">LIMITED SPACE</p>
+                                <p className="text-[10px] text-amber-300/80">
+                                  Only {apt.availableUnits} {apt.availableUnits === 1 ? 'room' : 'rooms'} left!
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-200 animate-pulse">
+                              Selling Fast
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="mb-3 px-3 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between text-emerald-300">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              </span>
+                              <div>
+                                <p className="text-xs font-bold leading-tight">VACANCIES AVAILABLE</p>
+                                <p className="text-[10px] text-emerald-300/80">
+                                  {apt.availableUnits}+ units ready for instant booking
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300">
+                              Ready to Book
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{apt.emoji}</span>
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                {apt.platform}
+                              </span>
+                              <h3 className="font-display text-sm font-bold text-foreground leading-snug">
+                                {apt.name}
+                              </h3>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <p
+                              className={`font-display text-lg font-black ${
+                                isFilledUp ? 'text-muted-foreground line-through' : 'text-foreground'
+                              }`}
+                            >
+                              {formatCurrency(apt.pricePerNight, region)}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {isFilledUp ? 'Sold Out' : '/ night'}
+                            </p>
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <p className="font-display text-lg font-black text-foreground">
-                            {formatCurrency(apt.pricePerNight, region)}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">/ night</p>
+                        {/* Distance & Rating */}
+                        <div className="flex items-center gap-3 my-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                            <span className="font-bold text-foreground">{apt.rating}</span>
+                            <span>({apt.reviews})</span>
+                          </span>
+                          <span>·</span>
+                          <span>{formatDistance(apt.distanceKm, region)} from center</span>
+                        </div>
+
+                        {/* Safety & Identity Badges */}
+                        <div className="flex items-center gap-2 flex-wrap mb-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${
+                              apt.isIdentityVerified
+                                ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25'
+                                : 'text-muted-foreground/60 bg-muted/30 border-border/40'
+                            }`}
+                          >
+                            <ShieldCheck className="h-3 w-3" />
+                            {apt.isIdentityVerified
+                              ? getIdentityVerificationBadge(region)
+                              : 'Unverified ID'}
+                          </span>
+
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${
+                              apt.safetyScore >= 95
+                                ? 'text-sky-300 bg-sky-500/10 border-sky-500/25'
+                                : 'text-amber-300 bg-amber-500/10 border-amber-500/25'
+                            }`}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            {apt.safetyScore}% Safety Rating
+                          </span>
                         </div>
                       </div>
 
-                      {/* Distance & Rating */}
-                      <div className="flex items-center gap-3 my-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
-                          <span className="font-bold text-foreground">{apt.rating}</span>
-                          <span>({apt.reviews})</span>
-                        </span>
-                        <span>·</span>
-                        <span>{formatDistance(apt.distanceKm, region)} from center</span>
-                      </div>
-
-                      {/* Safety & Identity Badges */}
-                      <div className="flex items-center gap-2 flex-wrap mb-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${
-                            apt.isIdentityVerified
-                              ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25'
-                              : 'text-muted-foreground/60 bg-muted/30 border-border/40'
-                          }`}
+                      <div className="flex items-center justify-between pt-3 border-t border-border/40">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setReportTarget({
+                              kind: 'apartment',
+                              id: apt.id,
+                              name: apt.name,
+                            })
+                          }
+                          className="text-[11px] text-muted-foreground/60 hover:text-red-400 flex items-center gap-1 transition-colors"
                         >
-                          <ShieldCheck className="h-3 w-3" />
-                          {apt.isIdentityVerified
-                            ? getIdentityVerificationBadge(region)
-                            : 'Unverified ID'}
-                        </span>
+                          <ShieldAlert className="h-3 w-3" />
+                          Report
+                        </button>
 
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${
-                            apt.safetyScore >= 95
-                              ? 'text-sky-300 bg-sky-500/10 border-sky-500/25'
-                              : 'text-amber-300 bg-amber-500/10 border-amber-500/25'
-                          }`}
-                        >
-                          <CheckCircle2 className="h-3 w-3" />
-                          {apt.safetyScore}% Safety Rating
-                        </span>
+                        {isFilledUp ? (
+                          <button
+                            type="button"
+                            onClick={() => handleJoinWaitlist(apt)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-all ${
+                              isWaitlisted
+                                ? 'bg-emerald-600 text-white shadow-emerald-500/20 hover:bg-emerald-500'
+                                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20'
+                            }`}
+                          >
+                            <Bell className="h-3.5 w-3.5" />
+                            {isWaitlisted ? 'On Waitlist ✓' : 'Join Waitlist (No Space)'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.dispatchEvent(
+                                new CustomEvent('lazy:push-notification', {
+                                  detail: {
+                                    message: `Opening booking details for ${apt.name} (${apt.occupancyLabel})...`,
+                                  },
+                                })
+                              );
+                            }}
+                            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-violet-500/20"
+                          >
+                            View Details
+                            <ExternalLink className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-between pt-3 border-t border-border/40">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setReportTarget({
-                            kind: 'apartment',
-                            id: apt.id,
-                            name: apt.name,
-                          })
-                        }
-                        className="text-[11px] text-muted-foreground/60 hover:text-red-400 flex items-center gap-1 transition-colors"
-                      >
-                        <ShieldAlert className="h-3 w-3" />
-                        Report
-                      </button>
-
-                      <button
-                        type="button"
-                        className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-violet-500/20"
-                      >
-                        View Details
-                        <ExternalLink className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

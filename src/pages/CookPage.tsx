@@ -6,6 +6,7 @@ import {
   findRecipeForIngredients,
 } from '../data/constants';
 import { Recipe } from '../types';
+import { VoiceButton } from '../components/VoiceButton';
 import {
   UtensilsCrossed,
   Sparkles,
@@ -17,6 +18,7 @@ import {
   RotateCcw,
   ChefHat,
   Flame,
+  Mic,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -113,6 +115,37 @@ export function CookPage() {
       setRecipe(null);
       inputRef.current?.focus();
     }
+  };
+
+  const handleVoiceIngredients = (transcript: string) => {
+    // Split speech transcripts automatically by commas, "and", or spaces
+    const parts = transcript
+      .split(/[,;\n]+|\s+and\s+/i)
+      .map((s) => s.trim().replace(/^and\s+/i, ''))
+      .filter(Boolean);
+
+    if (parts.length === 0) return;
+
+    setIngredients((prev) => {
+      const existingLower = new Set(prev.map((i) => i.toLowerCase()));
+      const newItems: string[] = [];
+      for (const p of parts) {
+        if (!existingLower.has(p.toLowerCase()) && prev.length + newItems.length < maxIngredients) {
+          newItems.push(p);
+          existingLower.add(p.toLowerCase());
+        }
+      }
+      if (newItems.length > 0) {
+        setStatus('idle');
+        setRecipe(null);
+        window.dispatchEvent(
+          new CustomEvent('lazy:push-notification', {
+            detail: { message: `🎙️ Added ${newItems.length} ingredient(s): ${newItems.join(', ')}` },
+          })
+        );
+      }
+      return [...prev, ...newItems].slice(0, maxIngredients);
+    });
   };
 
   const removeIngredient = (item: string) => {
@@ -238,40 +271,50 @@ export function CookPage() {
               </span>
             </label>
 
-            {/* Chips Box */}
-            <div className="p-3 min-h-[80px] rounded-2xl border border-border/50 bg-muted/20 flex flex-wrap gap-2 items-center">
-              {ingredients.map((item) => (
-                <span
-                  key={item}
-                  className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300"
-                >
-                  {item}
-                  <button
-                    type="button"
-                    onClick={() => removeIngredient(item)}
-                    className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-emerald-500/30 text-emerald-200"
+            {/* Chips Box with Voice Mic Button */}
+            <div className="flex items-stretch gap-2.5">
+              <div className="flex-1 p-3 min-h-[80px] rounded-2xl border border-border/50 bg-muted/20 flex flex-wrap gap-2 items-center">
+                {ingredients.map((item) => (
+                  <span
+                    key={item}
+                    className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300"
                   >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              ))}
+                    {item}
+                    <button
+                      type="button"
+                      onClick={() => removeIngredient(item)}
+                      className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-emerald-500/30 text-emerald-200"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                ))}
 
-              {ingredients.length < maxIngredients && (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  placeholder={ingredients.length === 0 ? 'Type an ingredient...' : 'Add more...'}
-                  value={inputVal}
-                  onChange={(e) => setInputVal(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ',') {
-                      e.preventDefault();
-                      addIngredient(inputVal);
-                    }
-                  }}
-                  className="flex-1 min-w-[120px] bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none py-1"
-                />
-              )}
+                {ingredients.length < maxIngredients && (
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder={ingredients.length === 0 ? 'Type an ingredient...' : 'Add more...'}
+                    value={inputVal}
+                    onChange={(e) => setInputVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        e.preventDefault();
+                        addIngredient(inputVal);
+                      }
+                    }}
+                    className="flex-1 min-w-[120px] bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none py-1"
+                  />
+                )}
+              </div>
+
+              {/* Hands-free Voice Button */}
+              <VoiceButton
+                onTranscript={handleVoiceIngredients}
+                size="lg"
+                title="Speak ingredients (e.g. Tomato, Eggs, Onion)"
+                className="self-stretch w-13 min-h-[80px] bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-300 shadow-md shadow-emerald-500/10"
+              />
             </div>
 
             {/* Quick Add presets */}

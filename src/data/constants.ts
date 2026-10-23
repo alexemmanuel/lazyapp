@@ -194,6 +194,36 @@ export function getIdentityVerificationBadge(country: string): string {
   return 'Gov. ID & Biometric Verified';
 }
 
+export function getReportToastMessage(country: string): string {
+  if (country === 'US') {
+    return 'Report logged with Trust & Safety team. Local authorities will be notified if necessary.';
+  }
+  if (country === 'GB') {
+    return 'Flagged to UK Trading Standards & Safety team.';
+  }
+  if (country === 'NG') {
+    return 'Report logged with the Nigerian Trust & Safety team.';
+  }
+  return 'Report logged with the regional Trust & Safety team.';
+}
+
+export function getLocationBadgeText(country: string): string {
+  const sym = getCurrencySymbol(country);
+  const codeName =
+    country === 'NG'
+      ? 'NGA'
+      : country === 'US'
+      ? 'USA'
+      : country === 'GB'
+      ? 'UK'
+      : country === 'CA'
+      ? 'CAN'
+      : isEU(country)
+      ? 'EUR'
+      : country;
+  return `📍 ${codeName} (${sym})`;
+}
+
 export function getArtisanNetworkName(country: string): string {
   if (country === 'NG') return 'local artisan networks';
   if (country === 'US') return 'TaskRabbit / Angi';
@@ -727,6 +757,22 @@ export function generateApartments(city: string, country: string): ApartmentItem
     const safe1 = rating1 >= 4.6 && (plat === 'Airbnb' || plat === 'Booking.com' || plat === 'PropertyPro');
     const safe2 = rating2 >= 4.7 && plat === 'Airbnb';
 
+    // Determine occupancy status (filled_up, few_left, available)
+    // Deterministic distribution: index 0 (item1: available, item2: filled_up), index 1 (item1: few_left, item2: available), index 2 (item1: filled_up, item2: few_left)
+    const occ1: { status: 'available' | 'few_left' | 'filled_up'; units: number; label: string } =
+      index === 0
+        ? { status: 'available', units: 3, label: 'Vacancies Available (3 spots)' }
+        : index === 1
+        ? { status: 'few_left', units: 1, label: 'Limited Space · Only 1 room left' }
+        : { status: 'filled_up', units: 0, label: 'No Space · Fully Booked' };
+
+    const occ2: { status: 'available' | 'few_left' | 'filled_up'; units: number; label: string } =
+      index === 0
+        ? { status: 'filled_up', units: 0, label: 'No Space · Fully Booked' }
+        : index === 1
+        ? { status: 'available', units: 5, label: 'Vacancies Available (5 rooms)' }
+        : { status: 'few_left', units: 2, label: 'Limited Space · 2 units left' };
+
     results.push({
       id: `${plat}-1`,
       platform: plat,
@@ -743,6 +789,9 @@ export function generateApartments(city: string, country: string): ApartmentItem
       color: theme.color,
       textColor: theme.textColor,
       borderColor: theme.borderColor,
+      occupancyStatus: occ1.status,
+      availableUnits: occ1.units,
+      occupancyLabel: occ1.label,
     });
 
     results.push({
@@ -761,6 +810,9 @@ export function generateApartments(city: string, country: string): ApartmentItem
       color: theme.color,
       textColor: theme.textColor,
       borderColor: theme.borderColor,
+      occupancyStatus: occ2.status,
+      availableUnits: occ2.units,
+      occupancyLabel: occ2.label,
     });
   });
 
@@ -1081,12 +1133,71 @@ export function findRecipeForIngredients(ingredients: string[]): Recipe {
    TASK & ARTISANS DATA (LAZY TASK)
    ========================================================================= */
 
-export const TASK_CATEGORIES = ['Plumber', 'Electrician', 'Laundry', 'Locksmith'];
+export const TASK_CATEGORIES = [
+  'Carpenter',
+  'Tiler',
+  'Plasterer',
+  'Painter',
+  'Mason',
+  'Welder',
+  'Plumber',
+  'Electrician',
+  'Mechanic',
+  'Roofer',
+  'AC Technician',
+  'Generator Tech',
+  'Locksmith',
+  'Laundry',
+  'Cleaner',
+  'Handyman',
+];
 
 export const CATEGORY_CONFIG: Record<
   string,
   { emoji: string; color: string; bg: string; border: string; ring: string }
 > = {
+  Carpenter: {
+    emoji: '🪵',
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/12',
+    border: 'border-amber-500/30',
+    ring: 'ring-amber-500/15',
+  },
+  Tiler: {
+    emoji: '📐',
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/12',
+    border: 'border-emerald-500/30',
+    ring: 'ring-emerald-500/15',
+  },
+  Plasterer: {
+    emoji: '🏛️',
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/12',
+    border: 'border-purple-500/30',
+    ring: 'ring-purple-500/15',
+  },
+  Painter: {
+    emoji: '🎨',
+    color: 'text-indigo-400',
+    bg: 'bg-indigo-500/12',
+    border: 'border-indigo-500/30',
+    ring: 'ring-indigo-500/15',
+  },
+  Mason: {
+    emoji: '🧱',
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/12',
+    border: 'border-orange-500/30',
+    ring: 'ring-orange-500/15',
+  },
+  Welder: {
+    emoji: '👨‍🏭',
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/12',
+    border: 'border-cyan-500/30',
+    ring: 'ring-cyan-500/15',
+  },
   Plumber: {
     emoji: '🔧',
     color: 'text-blue-400',
@@ -1096,24 +1207,10 @@ export const CATEGORY_CONFIG: Record<
   },
   Electrician: {
     emoji: '⚡',
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/12',
-    border: 'border-amber-500/30',
-    ring: 'ring-amber-500/15',
-  },
-  Laundry: {
-    emoji: '👕',
-    color: 'text-sky-400',
-    bg: 'bg-sky-500/12',
-    border: 'border-sky-500/30',
-    ring: 'ring-sky-500/15',
-  },
-  Locksmith: {
-    emoji: '🔑',
-    color: 'text-violet-400',
-    bg: 'bg-violet-500/12',
-    border: 'border-violet-500/30',
-    ring: 'ring-violet-500/15',
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-500/12',
+    border: 'border-yellow-500/30',
+    ring: 'ring-yellow-500/15',
   },
   Mechanic: {
     emoji: '🚗',
@@ -1122,33 +1219,54 @@ export const CATEGORY_CONFIG: Record<
     border: 'border-rose-500/30',
     ring: 'ring-rose-500/15',
   },
-  Cleaner: {
-    emoji: '✨',
+  Roofer: {
+    emoji: '🏠',
+    color: 'text-red-400',
+    bg: 'bg-red-500/12',
+    border: 'border-red-500/30',
+    ring: 'ring-red-500/15',
+  },
+  'AC Technician': {
+    emoji: '❄️',
+    color: 'text-sky-400',
+    bg: 'bg-sky-500/12',
+    border: 'border-sky-500/30',
+    ring: 'ring-sky-500/15',
+  },
+  'Generator Tech': {
+    emoji: '⚙️',
+    color: 'text-amber-300',
+    bg: 'bg-amber-400/12',
+    border: 'border-amber-400/30',
+    ring: 'ring-amber-400/15',
+  },
+  Locksmith: {
+    emoji: '🔑',
+    color: 'text-violet-400',
+    bg: 'bg-violet-500/12',
+    border: 'border-violet-500/30',
+    ring: 'ring-violet-500/15',
+  },
+  Laundry: {
+    emoji: '👕',
     color: 'text-teal-400',
     bg: 'bg-teal-500/12',
     border: 'border-teal-500/30',
     ring: 'ring-teal-500/15',
   },
-  Painter: {
-    emoji: '🎨',
-    color: 'text-indigo-400',
-    bg: 'bg-indigo-500/12',
-    border: 'border-indigo-500/30',
-    ring: 'ring-indigo-500/15',
-  },
-  Carpenter: {
-    emoji: '🪵',
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-500/12',
-    border: 'border-yellow-500/30',
-    ring: 'ring-yellow-500/15',
+  Cleaner: {
+    emoji: '✨',
+    color: 'text-emerald-300',
+    bg: 'bg-emerald-400/12',
+    border: 'border-emerald-400/30',
+    ring: 'ring-emerald-400/15',
   },
   Handyman: {
     emoji: '🛠️',
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/12',
-    border: 'border-emerald-500/30',
-    ring: 'ring-emerald-500/15',
+    color: 'text-lime-400',
+    bg: 'bg-lime-500/12',
+    border: 'border-lime-500/30',
+    ring: 'ring-lime-500/15',
   },
 };
 
@@ -1180,37 +1298,147 @@ export const REGIONAL_MARKET_PROVIDERS: Record<
   Record<string, { name: string; rating: number; reviews: number; distance: string; phone: string; badge: string }[]>
 > = {
   NG: {
+    Carpenter: [
+      { name: 'Adekunle Master Woodworks & Cabinetry', rating: 4.9, reviews: 215, distance: '1.1 km', phone: '+234 803 445 1190', badge: 'Artisan Guild Vetted' },
+      { name: 'Lekki Bespoke Joinery & Furniture', rating: 4.8, reviews: 148, distance: '2.4 km', phone: '+234 812 678 3341', badge: 'Certified Woodcrafter' },
+      { name: 'Yaba Wardrobe & Door Specialist', rating: 4.7, reviews: 92, distance: '3.6 km', phone: '+234 901 882 4501', badge: 'Community Trusted' },
+    ],
+    Tiler: [
+      { name: 'Engr. Ibrahim Precision Marble & Tiling', rating: 4.9, reviews: 240, distance: '0.9 km', phone: '+234 802 331 8844', badge: 'Porcelain & Granite Vetted' },
+      { name: 'Victoria Island Wall & Floor Pavers', rating: 4.8, reviews: 165, distance: '1.8 km', phone: '+234 814 559 2200', badge: 'Laser Level Certified' },
+      { name: 'Surulere Mosaic & Terrazzo Pros', rating: 4.6, reviews: 110, distance: '3.1 km', phone: '+234 703 129 9940', badge: 'Community Trusted' },
+    ],
+    Plasterer: [
+      { name: 'Kunle POP Ceilings & Screeding Master', rating: 4.9, reviews: 198, distance: '1.2 km', phone: '+234 806 771 4450', badge: 'Master POP Craftsman' },
+      { name: 'Apex Gypsum Board & Wall Plastering', rating: 4.8, reviews: 135, distance: '2.0 km', phone: '+234 809 332 1187', badge: 'Smooth Screed Specialist' },
+      { name: 'Mainland Interior Plaster & Cornice', rating: 4.7, reviews: 88, distance: '3.5 km', phone: '+234 818 901 2234', badge: 'Community Trusted' },
+    ],
+    Painter: [
+      { name: 'Segun Elite Spray Painting & Screed', rating: 4.9, reviews: 260, distance: '0.8 km', phone: '+234 803 992 1102', badge: 'Dulux / Berger Vetted' },
+      { name: 'Dulux Certified House Painters Lagos', rating: 4.8, reviews: 172, distance: '1.7 km', phone: '+234 816 443 8812', badge: 'Exterior & Interior Pro' },
+      { name: 'Ikeja Wall Decorators & Texture Paint', rating: 4.6, reviews: 95, distance: '2.9 km', phone: '+234 705 661 3349', badge: 'Community Trusted' },
+    ],
+    Mason: [
+      { name: 'Alhaji Musa Concrete & Bricklaying Crew', rating: 4.9, reviews: 185, distance: '1.4 km', phone: '+234 802 774 2231', badge: 'Structural Mason Vetted' },
+      { name: 'Lekki Solid Block & Foundation Masonry', rating: 4.7, reviews: 124, distance: '2.6 km', phone: '+234 813 908 6611', badge: 'Foundation Specialist' },
+      { name: 'Oshodi Interlocking Paver & Wall Pro', rating: 4.6, reviews: 81, distance: '3.8 km', phone: '+234 902 441 5567', badge: 'Community Trusted' },
+    ],
+    Welder: [
+      { name: 'David Wrought Iron Gates & Metal Works', rating: 4.9, reviews: 220, distance: '1.0 km', phone: '+234 803 558 7701', badge: 'Argon & Arc Certified' },
+      { name: 'Gbagada Burglar Proof & Steel Fabricator', rating: 4.8, reviews: 153, distance: '2.1 km', phone: '+234 817 220 9945', badge: 'Heavy Steel Specialist' },
+      { name: 'Lagos Island Tank & Railing Fabrications', rating: 4.6, reviews: 90, distance: '3.3 km', phone: '+234 706 881 2290', badge: 'Community Trusted' },
+    ],
     Plumber: [
       { name: 'Oluwaseun - Verified Plumber', rating: 4.9, reviews: 182, distance: '1.2 km', phone: '+234 803 123 4567', badge: 'Local artisan vetted' },
-      { name: 'Chidi - AC Specialist', rating: 4.8, reviews: 141, distance: '2.1 km', phone: '+234 809 456 7812', badge: 'Same-day response' },
+      { name: 'Chidi - Pipe & Pump Specialist', rating: 4.8, reviews: 141, distance: '2.1 km', phone: '+234 809 456 7812', badge: 'Same-day response' },
       { name: 'Lekki Pipe & Drain Crew', rating: 4.6, reviews: 96, distance: '3.4 km', phone: '+234 706 218 9034', badge: 'Community trusted' },
     ],
     Electrician: [
-      { name: 'Emeka - Certified Electrician', rating: 4.9, reviews: 164, distance: '0.8 km', phone: '+234 812 234 5678', badge: 'Local artisan vetted' },
-      { name: 'Aisha Power Solutions', rating: 4.7, reviews: 119, distance: '1.9 km', phone: '+234 901 345 6789', badge: 'Fast response' },
+      { name: 'Emeka - Certified Electrician & Solar Pro', rating: 4.9, reviews: 164, distance: '0.8 km', phone: '+234 812 234 5678', badge: 'Local artisan vetted' },
+      { name: 'Aisha Power Solutions & Inverters', rating: 4.7, reviews: 119, distance: '1.9 km', phone: '+234 901 345 6789', badge: 'Fast response' },
       { name: 'Ikeja VoltWorks', rating: 4.6, reviews: 83, distance: '3.0 km', phone: '+234 805 987 6543', badge: 'Community trusted' },
     ],
+    Mechanic: [
+      { name: 'Engr. Femi Japanese & German Auto Clinic', rating: 4.9, reviews: 280, distance: '1.5 km', phone: '+234 802 884 9912', badge: 'Computer Diagnostics Pro' },
+      { name: 'Lekki Mobile Auto Rescue & Brake Tech', rating: 4.8, reviews: 160, distance: '2.3 km', phone: '+234 813 440 2219', badge: '24/7 Roadside Assistance' },
+      { name: 'Surulere Transmission & Engine Works', rating: 4.6, reviews: 104, distance: '3.7 km', phone: '+234 701 559 8830', badge: 'Community Trusted' },
+    ],
+    Roofer: [
+      { name: 'Austin Aluminum Roofing & Leak Doctor', rating: 4.9, reviews: 175, distance: '1.3 km', phone: '+234 803 661 9920', badge: 'Waterproofing Certified' },
+      { name: 'Lagos Stone-Coated Tile & Truss Specialist', rating: 4.7, reviews: 118, distance: '2.5 km', phone: '+234 815 330 7712', badge: 'Roof Frame Pro' },
+      { name: 'Mainland Gutter & Roof Patch Services', rating: 4.6, reviews: 76, distance: '3.9 km', phone: '+234 903 881 4455', badge: 'Community Trusted' },
+    ],
+    'AC Technician': [
+      { name: 'Babatunde Inverter AC & Chiller Services', rating: 4.9, reviews: 230, distance: '0.7 km', phone: '+234 802 994 3311', badge: 'Gas Refill & Repair Vetted' },
+      { name: 'CoolBreeze Air Conditioning Repairs', rating: 4.8, reviews: 150, distance: '1.9 km', phone: '+234 818 221 6650', badge: 'HVAC Specialist' },
+      { name: 'Victoria Island Central Cooling Care', rating: 4.6, reviews: 92, distance: '3.2 km', phone: '+234 708 440 1123', badge: 'Community Trusted' },
+    ],
+    'Generator Tech': [
+      { name: 'Baba Mike Mikano & Perkins Plant Specialist', rating: 4.9, reviews: 255, distance: '0.9 km', phone: '+234 803 770 1289', badge: 'Diesel & Petrol Certified' },
+      { name: 'Lekki Rapid Gen Servicing & Carburetor Pro', rating: 4.8, reviews: 174, distance: '1.8 km', phone: '+234 814 662 9901', badge: 'Same-Day Field Tech' },
+      { name: 'Mainland Heavy Generator Overhaulers', rating: 4.6, reviews: 103, distance: '3.4 km', phone: '+234 909 331 4456', badge: 'Community Trusted' },
+    ],
     Laundry: [
-      { name: "Ada's FreshPress", rating: 4.9, reviews: 210, distance: '0.5 km', phone: '+234 803 876 5412', badge: 'Pickup available' },
-      { name: 'Yaba Wash & Fold', rating: 4.7, reviews: 132, distance: '1.6 km', phone: '+234 814 223 6790', badge: 'Same-day service' },
-      { name: 'Tolu Clean Threads', rating: 4.6, reviews: 78, distance: '2.8 km', phone: '+234 706 456 8123', badge: 'Community trusted' },
+      { name: "Ada's FreshPress Dry Cleaning", rating: 4.9, reviews: 210, distance: '0.5 km', phone: '+234 803 876 5412', badge: 'Pickup available' },
+      { name: 'Yaba Wash & Fold Express', rating: 4.7, reviews: 132, distance: '1.6 km', phone: '+234 814 223 6790', badge: 'Same-day service' },
+      { name: 'Tolu Clean Threads & Starch Pro', rating: 4.6, reviews: 78, distance: '2.8 km', phone: '+234 706 456 8123', badge: 'Community trusted' },
     ],
     Locksmith: [
-      { name: 'Bayo - Secure Key Expert', rating: 4.9, reviews: 155, distance: '0.9 km', phone: '+234 809 765 4321', badge: '24/7 response' },
-      { name: 'Mariam Lock & Safe', rating: 4.8, reviews: 108, distance: '1.7 km', phone: '+234 812 678 9012', badge: 'Local artisan vetted' },
-      { name: 'Surulere Key Rescue', rating: 4.6, reviews: 71, distance: '3.2 km', phone: '+234 901 234 5678', badge: 'Community trusted' },
+      { name: 'Bayo - Secure Key & Smart Lock Expert', rating: 4.9, reviews: 155, distance: '0.9 km', phone: '+234 809 765 4321', badge: '24/7 response' },
+      { name: 'Mariam Safe & Digital Lock Solutions', rating: 4.8, reviews: 108, distance: '1.7 km', phone: '+234 812 678 9012', badge: 'Local artisan vetted' },
+      { name: 'Surulere Master Key Rescue', rating: 4.6, reviews: 71, distance: '3.2 km', phone: '+234 901 234 5678', badge: 'Community trusted' },
+    ],
+    Cleaner: [
+      { name: 'Spotless Homes Post-Construction Deep Clean', rating: 4.9, reviews: 265, distance: '0.6 km', phone: '+234 803 118 7720', badge: 'Fumigation & Steam Vetted' },
+      { name: 'Lekki Janitorial & Upholstery Cleaners', rating: 4.8, reviews: 180, distance: '1.4 km', phone: '+234 817 992 4431', badge: 'Eco Chemical Certified' },
+      { name: 'Sparkle Fresh Pest Control & Maid Services', rating: 4.6, reviews: 94, distance: '2.7 km', phone: '+234 705 330 9912', badge: 'Community Trusted' },
+    ],
+    Handyman: [
+      { name: 'Ifeanyi Multi-Skilled Home Repair Pro', rating: 4.9, reviews: 290, distance: '0.5 km', phone: '+234 802 441 8890', badge: 'All-Round Fixer Vetted' },
+      { name: 'QuickFix TV Mounts & Fixture Assembly', rating: 4.8, reviews: 195, distance: '1.3 km', phone: '+234 813 770 2245', badge: 'Same-Day Dispatch' },
+      { name: 'Lagos Express Odd Job Specialists', rating: 4.6, reviews: 115, distance: '2.8 km', phone: '+234 906 119 3378', badge: 'Community Trusted' },
     ],
   },
   US: {
+    Carpenter: [
+      { name: 'Bay Area Custom Woodwork via TaskRabbit', rating: 4.9, reviews: 310, distance: '0.6 mi', phone: '+1 (415) 555-0182', badge: 'TaskRabbit Pro' },
+      { name: 'Golden Gate Cabinet & Joinery Pros', rating: 4.8, reviews: 198, distance: '1.4 mi', phone: '+1 (628) 555-0144', badge: 'Angi Screened' },
+      { name: 'City Trim & Framing Craftsmen', rating: 4.6, reviews: 120, distance: '2.5 mi', phone: '+1 (510) 555-0199', badge: 'Yelp Top Rated' },
+    ],
+    Tiler: [
+      { name: 'San Francisco Tile & Stone via Angi', rating: 4.9, reviews: 285, distance: '0.5 mi', phone: '+1 (415) 555-0191', badge: 'Angi Screened' },
+      { name: 'Bay Tile, Mosaic & Grout Specialists', rating: 4.8, reviews: 176, distance: '1.2 mi', phone: '+1 (650) 555-0138', badge: 'TaskRabbit Pro' },
+      { name: 'Metro Marble & Backsplash Pros', rating: 4.6, reviews: 104, distance: '2.3 mi', phone: '+1 (408) 555-0177', badge: 'Yelp Top Rated' },
+    ],
+    Plasterer: [
+      { name: 'Drywall Masters & Plastering via TaskRabbit', rating: 4.9, reviews: 240, distance: '0.7 mi', phone: '+1 (415) 555-0163', badge: 'TaskRabbit Pro' },
+      { name: 'Golden State Drywall Patch & Texture Pro', rating: 4.8, reviews: 162, distance: '1.5 mi', phone: '+1 (510) 555-0149', badge: 'Angi Screened' },
+      { name: 'Precision Skim Coat & Ceiling Repair', rating: 4.6, reviews: 98, distance: '2.8 mi', phone: '+1 (628) 555-0112', badge: 'Yelp Top Rated' },
+    ],
+    Painter: [
+      { name: 'Elite Color Interior Painters via TaskRabbit', rating: 4.9, reviews: 345, distance: '0.4 mi', phone: '+1 (415) 555-0128', badge: 'TaskRabbit Pro' },
+      { name: 'Bay Area Exterior & Cabinet Painting', rating: 4.8, reviews: 220, distance: '1.1 mi', phone: '+1 (650) 555-0174', badge: 'Angi Screened' },
+      { name: 'Metro FreshCoat Pro Decorators', rating: 4.6, reviews: 130, distance: '2.1 mi', phone: '+1 (408) 555-0153', badge: 'Yelp Top Rated' },
+    ],
+    Mason: [
+      { name: 'Bay Stone & Brick Masonry Specialists', rating: 4.9, reviews: 190, distance: '0.8 mi', phone: '+1 (415) 555-0185', badge: 'Angi Screened' },
+      { name: 'Concrete Pavers & Retaining Wall Pros', rating: 4.8, reviews: 134, distance: '1.7 mi', phone: '+1 (510) 555-0168', badge: 'TaskRabbit Pro' },
+      { name: 'City Chimney & Brick Repair Services', rating: 4.6, reviews: 88, distance: '2.9 mi', phone: '+1 (628) 555-0130', badge: 'Yelp Top Rated' },
+    ],
+    Welder: [
+      { name: 'Pacific Mobile Welding & Fabrication', rating: 4.9, reviews: 210, distance: '0.9 mi', phone: '+1 (415) 555-0171', badge: 'Certified Welder AWS' },
+      { name: 'Iron Gate & Railing Repairs via Angi', rating: 4.8, reviews: 145, distance: '1.6 mi', phone: '+1 (650) 555-0195', badge: 'Angi Screened' },
+      { name: 'Structural Steel Emergency On-Site Welder', rating: 4.6, reviews: 92, distance: '3.0 mi', phone: '+1 (510) 555-0140', badge: 'Yelp Top Rated' },
+    ],
     Plumber: [
       { name: "Mike's Plumbing via TaskRabbit", rating: 4.9, reviews: 312, distance: '0.4 mi', phone: '+1 (415) 555-0148', badge: 'TaskRabbit Pro' },
       { name: 'Bay Area Plumbing Pros', rating: 4.8, reviews: 204, distance: '1.1 mi', phone: '+1 (628) 555-0192', badge: 'Angi screened' },
       { name: 'Yelp Local Pipe Repair', rating: 4.6, reviews: 127, distance: '2.2 mi', phone: '+1 (510) 555-0166', badge: 'Yelp top rated' },
     ],
     Electrician: [
-      { name: 'Bay Area Electricians', rating: 4.9, reviews: 287, distance: '0.6 mi', phone: '+1 (415) 555-0175', badge: 'Angi screened' },
+      { name: 'Bay Area Electricians via Angi', rating: 4.9, reviews: 287, distance: '0.6 mi', phone: '+1 (415) 555-0175', badge: 'Angi screened' },
       { name: 'BrightWire via TaskRabbit', rating: 4.8, reviews: 193, distance: '1.3 mi', phone: '+1 (650) 555-0124', badge: 'TaskRabbit Pro' },
       { name: 'Yelp Home Electric', rating: 4.6, reviews: 104, distance: '2.0 mi', phone: '+1 (408) 555-0188', badge: 'Yelp top rated' },
+    ],
+    Mechanic: [
+      { name: 'Mobile Auto Doctor Diagnostic Tech', rating: 4.9, reviews: 320, distance: '0.7 mi', phone: '+1 (415) 555-0139', badge: 'ASE Certified' },
+      { name: 'Bay Brakes & Battery Mobile Service', rating: 4.8, reviews: 215, distance: '1.4 mi', phone: '+1 (510) 555-0152', badge: 'Angi Screened' },
+      { name: 'City German & Import Auto Mechanic', rating: 4.6, reviews: 140, distance: '2.6 mi', phone: '+1 (650) 555-0181', badge: 'Yelp Top Rated' },
+    ],
+    Roofer: [
+      { name: 'Bay Area Shingle & Roof Leak Pros', rating: 4.9, reviews: 185, distance: '0.8 mi', phone: '+1 (415) 555-0165', badge: 'Licensed Roofing Pro' },
+      { name: 'Gutter Clean & Roof Patch via Angi', rating: 4.7, reviews: 129, distance: '1.8 mi', phone: '+1 (628) 555-0142', badge: 'Angi Screened' },
+      { name: 'Pacific Roof Inspection & Repair', rating: 4.6, reviews: 84, distance: '3.1 mi', phone: '+1 (408) 555-0197', badge: 'Yelp Top Rated' },
+    ],
+    'AC Technician': [
+      { name: 'AirPro HVAC & Heating Specialist', rating: 4.9, reviews: 295, distance: '0.5 mi', phone: '+1 (415) 555-0118', badge: 'EPA Certified' },
+      { name: 'Bay Heat Pump & AC Repair via TaskRabbit', rating: 4.8, reviews: 184, distance: '1.2 mi', phone: '+1 (650) 555-0169', badge: 'TaskRabbit Pro' },
+      { name: 'Metro Climate Control Care', rating: 4.6, reviews: 110, distance: '2.4 mi', phone: '+1 (510) 555-0125', badge: 'Yelp Top Rated' },
+    ],
+    'Generator Tech': [
+      { name: 'Generac & Standby Power Specialists', rating: 4.9, reviews: 165, distance: '1.0 mi', phone: '+1 (415) 555-0159', badge: 'Generac Certified' },
+      { name: 'Emergency Backup Generator Tech via Angi', rating: 4.8, reviews: 118, distance: '1.9 mi', phone: '+1 (628) 555-0186', badge: 'Angi Screened' },
+      { name: 'Home Power Transfer Switch Pros', rating: 4.6, reviews: 75, distance: '3.2 mi', phone: '+1 (408) 555-0141', badge: 'Yelp Top Rated' },
     ],
     Laundry: [
       { name: 'FreshFold via TaskRabbit', rating: 4.9, reviews: 356, distance: '0.3 mi', phone: '+1 (415) 555-0133', badge: 'TaskRabbit Pro' },
@@ -1222,27 +1450,97 @@ export const REGIONAL_MARKET_PROVIDERS: Record<
       { name: 'TaskRabbit Key Rescue', rating: 4.8, reviews: 180, distance: '1.2 mi', phone: '+1 (650) 555-0161', badge: 'TaskRabbit Pro' },
       { name: 'Yelp Secure Entry', rating: 4.6, reviews: 113, distance: '2.4 mi', phone: '+1 (408) 555-0199', badge: 'Yelp top rated' },
     ],
+    Cleaner: [
+      { name: 'Sparkle Clean Deep House Cleaning', rating: 4.9, reviews: 380, distance: '0.4 mi', phone: '+1 (415) 555-0176', badge: 'TaskRabbit Pro' },
+      { name: 'EcoGreen Home Cleaners via Angi', rating: 4.8, reviews: 225, distance: '1.0 mi', phone: '+1 (510) 555-0194', badge: 'Angi Screened' },
+      { name: 'Move-in Move-out Maid Pro', rating: 4.6, reviews: 135, distance: '2.0 mi', phone: '+1 (628) 555-0167', badge: 'Yelp Top Rated' },
+    ],
+    Handyman: [
+      { name: 'QuickFix All-in-One Handyman via TaskRabbit', rating: 4.9, reviews: 410, distance: '0.3 mi', phone: '+1 (415) 555-0154', badge: 'TaskRabbit Pro' },
+      { name: 'Bay Assembly & Mounting Services', rating: 4.8, reviews: 260, distance: '0.9 mi', phone: '+1 (650) 555-0129', badge: 'Angi Screened' },
+      { name: 'Neighborhood Fixer & Odd Jobs', rating: 4.6, reviews: 145, distance: '1.9 mi', phone: '+1 (408) 555-0198', badge: 'Yelp Top Rated' },
+    ],
   },
   GB: {
+    Carpenter: [
+      { name: 'London Bespoke Joinery via Checkatrade', rating: 4.9, reviews: 250, distance: '0.6 mi', phone: '+44 20 7946 0912', badge: 'Checkatrade Vetted' },
+      { name: 'Thames Carpentry & Cabinet Makers', rating: 4.8, reviews: 170, distance: '1.3 mi', phone: '+44 20 7946 0451', badge: 'Rated People' },
+      { name: 'Bespoke Wardrobes & Flooring UK', rating: 4.6, reviews: 98, distance: '2.4 mi', phone: '+44 161 496 0772', badge: 'Bark.com Top Rated' },
+    ],
+    Tiler: [
+      { name: 'London Precision Tiling via Checkatrade', rating: 4.9, reviews: 235, distance: '0.5 mi', phone: '+44 20 7946 0834', badge: 'Checkatrade Vetted' },
+      { name: 'Royal Tile, Granite & Victorian Pavers', rating: 4.8, reviews: 158, distance: '1.4 mi', phone: '+44 121 496 0399', badge: 'Rated People' },
+      { name: 'Westminster Porcelain & Bathroom Tilers', rating: 4.6, reviews: 92, distance: '2.5 mi', phone: '+44 113 496 0521', badge: 'Bark.com Verified' },
+    ],
+    Plasterer: [
+      { name: 'Callum Plastering & Skimming Pro', rating: 4.9, reviews: 215, distance: '0.7 mi', phone: '+44 20 7946 0719', badge: 'Checkatrade Vetted' },
+      { name: 'Thames Drywall & Coving Specialists', rating: 4.8, reviews: 142, distance: '1.5 mi', phone: '+44 20 7946 0288', badge: 'Rated People' },
+      { name: 'Smooth Wall & Ceiling Plasterers', rating: 4.6, reviews: 85, distance: '2.7 mi', phone: '+44 117 496 0612', badge: 'Bark.com Top Rated' },
+    ],
+    Painter: [
+      { name: 'London Decorators via Checkatrade', rating: 4.9, reviews: 290, distance: '0.4 mi', phone: '+44 20 7946 0643', badge: 'Checkatrade Vetted' },
+      { name: 'Kensington Interior & Exterior Painters', rating: 4.8, reviews: 185, distance: '1.2 mi', phone: '+44 20 7946 0194', badge: 'Rated People' },
+      { name: 'Crown & Dulux Approved UK Painters', rating: 4.6, reviews: 110, distance: '2.2 mi', phone: '+44 161 496 0885', badge: 'Bark.com Verified' },
+    ],
+    Mason: [
+      { name: 'British Heritage Brickwork via Checkatrade', rating: 4.9, reviews: 180, distance: '0.8 mi', phone: '+44 20 7946 0551', badge: 'Checkatrade Vetted' },
+      { name: 'Stone & Mortar Restoration Specialists', rating: 4.7, reviews: 120, distance: '1.7 mi', phone: '+44 121 496 0714', badge: 'Rated People' },
+      { name: 'London Garden Walls & Pointing Pro', rating: 4.6, reviews: 80, distance: '2.9 mi', phone: '+44 113 496 0432', badge: 'Bark.com Verified' },
+    ],
+    Welder: [
+      { name: 'Thames Mobile Welding & Gate Repair', rating: 4.9, reviews: 195, distance: '0.9 mi', phone: '+44 20 7946 0382', badge: 'Checkatrade Vetted' },
+      { name: 'Wrought Iron Railing & Steelwork London', rating: 4.8, reviews: 130, distance: '1.8 mi', phone: '+44 20 7946 0991', badge: 'Rated People' },
+      { name: 'Emergency On-Site Metal Fabricators', rating: 4.5, reviews: 78, distance: '3.1 mi', phone: '+44 161 496 0224', badge: 'Bark.com Verified' },
+    ],
     Plumber: [
-      { name: 'London Boiler & Plumbing Ltd via Checkatrade', rating: 4.9, reviews: 264, distance: '0.5 mi', phone: '+44 20 7946 0958', badge: 'Checkatrade vetted' },
-      { name: 'Rated People London Plumbers', rating: 4.8, reviews: 187, distance: '1.2 mi', phone: '+44 20 7946 0314', badge: 'Rated People' },
-      { name: 'Thames Pipe & Heating', rating: 4.6, reviews: 112, distance: '2.0 mi', phone: '+44 161 496 0821', badge: 'Local top rated' },
+      { name: 'Oliver - Gas Safe Engineer via Checkatrade', rating: 4.9, reviews: 264, distance: '0.5 mi', phone: '+44 20 7946 0958', badge: 'Checkatrade vetted' },
+      { name: 'Callum - Emergency Plumber', rating: 4.8, reviews: 187, distance: '1.2 mi', phone: '+44 20 7946 0314', badge: 'Rated People' },
+      { name: 'Thames Pipe & Heating Ltd', rating: 4.6, reviews: 112, distance: '2.0 mi', phone: '+44 161 496 0821', badge: 'Bark.com top rated' },
     ],
     Electrician: [
       { name: 'London Electricians via Checkatrade', rating: 4.9, reviews: 231, distance: '0.7 mi', phone: '+44 20 7946 0742', badge: 'Checkatrade vetted' },
       { name: 'Rated People Electrical Pro', rating: 4.8, reviews: 159, distance: '1.4 mi', phone: '+44 121 496 0288', badge: 'Rated People' },
-      { name: 'Bristol BrightSpark Services', rating: 4.6, reviews: 103, distance: '2.5 mi', phone: '+44 117 496 0516', badge: 'Local top rated' },
+      { name: 'Bristol BrightSpark Services', rating: 4.6, reviews: 103, distance: '2.5 mi', phone: '+44 117 496 0516', badge: 'Bark.com top rated' },
+    ],
+    Mechanic: [
+      { name: 'Mobile Mechanic London via Checkatrade', rating: 4.9, reviews: 280, distance: '0.8 mi', phone: '+44 20 7946 0883', badge: 'Checkatrade Vetted' },
+      { name: 'UK Emergency Roadside Diagnostics', rating: 4.8, reviews: 190, distance: '1.5 mi', phone: '+44 121 496 0915', badge: 'Rated People' },
+      { name: 'Brake & Clutch Mobile Clinic', rating: 4.6, reviews: 115, distance: '2.8 mi', phone: '+44 161 496 0441', badge: 'Bark.com Verified' },
+    ],
+    Roofer: [
+      { name: 'London Roof Care & Chimney Repair', rating: 4.9, reviews: 210, distance: '0.7 mi', phone: '+44 20 7946 0255', badge: 'Checkatrade Vetted' },
+      { name: 'Slate & Tile Roofers via Rated People', rating: 4.7, reviews: 135, distance: '1.6 mi', phone: '+44 113 496 0899', badge: 'Rated People' },
+      { name: 'Emergency Leak Patch & Gutter Clean', rating: 4.6, reviews: 88, distance: '2.9 mi', phone: '+44 117 496 0371', badge: 'Bark.com Verified' },
+    ],
+    'AC Technician': [
+      { name: 'London HVAC & Heat Pump Specialists', rating: 4.9, reviews: 205, distance: '0.9 mi', phone: '+44 20 7946 0148', badge: 'Checkatrade Vetted' },
+      { name: 'EcoClimate Air Con Installations', rating: 4.8, reviews: 140, distance: '1.7 mi', phone: '+44 121 496 0633', badge: 'Rated People' },
+      { name: 'Commercial & Home Chiller Services', rating: 4.5, reviews: 82, distance: '3.0 mi', phone: '+44 161 496 0992', badge: 'Bark.com Verified' },
+    ],
+    'Generator Tech': [
+      { name: 'London Diesel Plant & Generator Services', rating: 4.9, reviews: 150, distance: '1.1 mi', phone: '+44 20 7946 0977', badge: 'Checkatrade Vetted' },
+      { name: 'Backup Power & Uninterruptible Systems UK', rating: 4.7, reviews: 98, distance: '2.0 mi', phone: '+44 113 496 0244', badge: 'Rated People' },
+      { name: 'Perkins & Cummins Service Engineers', rating: 4.6, reviews: 68, distance: '3.3 mi', phone: '+44 161 496 0553', badge: 'Bark.com Verified' },
     ],
     Laundry: [
       { name: 'Checkatrade Laundry & Ironing', rating: 4.9, reviews: 198, distance: '0.4 mi', phone: '+44 20 7946 0127', badge: 'Checkatrade vetted' },
       { name: 'Rated People Home Care', rating: 4.7, reviews: 144, distance: '1.1 mi', phone: '+44 113 496 0674', badge: 'Rated People' },
-      { name: 'Manchester FreshPress', rating: 4.6, reviews: 89, distance: '2.1 mi', phone: '+44 161 496 0135', badge: 'Local top rated' },
+      { name: 'Manchester FreshPress', rating: 4.6, reviews: 89, distance: '2.1 mi', phone: '+44 161 496 0135', badge: 'Bark.com verified' },
     ],
     Locksmith: [
       { name: 'Checkatrade 24/7 Locksmiths', rating: 4.9, reviews: 221, distance: '0.6 mi', phone: '+44 20 7946 0881', badge: 'Checkatrade vetted' },
       { name: 'Rated People Key Experts', rating: 4.8, reviews: 163, distance: '1.3 mi', phone: '+44 121 496 0749', badge: 'Rated People' },
-      { name: 'Yorkshire Secure Entry', rating: 4.6, reviews: 92, distance: '2.3 mi', phone: '+44 113 496 0196', badge: 'Local top rated' },
+      { name: 'Yorkshire Secure Entry', rating: 4.6, reviews: 92, distance: '2.3 mi', phone: '+44 113 496 0196', badge: 'Bark.com verified' },
+    ],
+    Cleaner: [
+      { name: 'Pristine London Deep Cleaning Pro', rating: 4.9, reviews: 310, distance: '0.5 mi', phone: '+44 20 7946 0501', badge: 'Checkatrade Vetted' },
+      { name: 'End of Tenancy Cleaning Specialists', rating: 4.8, reviews: 215, distance: '1.2 mi', phone: '+44 121 496 0844', badge: 'Rated People' },
+      { name: 'Domestic Steam & Carpet Cleaners UK', rating: 4.6, reviews: 120, distance: '2.2 mi', phone: '+44 161 496 0619', badge: 'Bark.com Verified' },
+    ],
+    Handyman: [
+      { name: 'London Multi-Trade Handyman Services', rating: 4.9, reviews: 360, distance: '0.4 mi', phone: '+44 20 7946 0377', badge: 'Checkatrade Vetted' },
+      { name: 'Odd Jobs & Flat Pack Assembly Pro', rating: 4.8, reviews: 230, distance: '1.0 mi', phone: '+44 113 496 0918', badge: 'Rated People' },
+      { name: 'QuickFix Household Repair Crew', rating: 4.6, reviews: 140, distance: '2.0 mi', phone: '+44 161 496 0735', badge: 'Bark.com Verified' },
     ],
   },
 };
@@ -1251,6 +1549,36 @@ export const GLOBAL_FALLBACK_PROVIDERS: Record<
   string,
   { name: string; rating: number; reviews: number; distance: string; phone: string; badge: string }[]
 > = {
+  Carpenter: [
+    { name: 'Precision Woodcraft & Cabinetry', rating: 4.9, reviews: 260, distance: '0.6 mi', phone: '(555) 492-3310', badge: 'Guild Certified' },
+    { name: 'Master Joinery & Custom Furniture', rating: 4.8, reviews: 175, distance: '1.2 mi', phone: '(555) 881-2294', badge: 'Vetted Artisan' },
+    { name: 'Door & Trim Woodworking Pro', rating: 4.6, reviews: 110, distance: '2.1 mi', phone: '(555) 304-8855', badge: 'Fast Response' },
+  ],
+  Tiler: [
+    { name: 'Porcelain & Marble Tile Craftsmen', rating: 4.9, reviews: 245, distance: '0.5 mi', phone: '(555) 671-8840', badge: 'Tile Guild Vetted' },
+    { name: 'Precision Floor & Wall Pavers', rating: 4.8, reviews: 160, distance: '1.1 mi', phone: '(555) 902-1144', badge: 'Laser Leveled' },
+    { name: 'Kitchen & Bathroom Mosaic Masters', rating: 4.6, reviews: 98, distance: '2.0 mi', phone: '(555) 441-7729', badge: 'Top Rated' },
+  ],
+  Plasterer: [
+    { name: 'Master Plastering & Drywall Finishers', rating: 4.9, reviews: 220, distance: '0.7 mi', phone: '(555) 551-9922', badge: 'Smooth Skim Pro' },
+    { name: 'POP & Gypsum Ceiling Specialists', rating: 4.8, reviews: 145, distance: '1.4 mi', phone: '(555) 782-3311', badge: 'Vetted Craftsman' },
+    { name: 'Wall Crack & Patching Crew', rating: 4.6, reviews: 90, distance: '2.5 mi', phone: '(555) 219-4408', badge: 'Open Now' },
+  ],
+  Painter: [
+    { name: 'Elite Interior & Exterior Painters', rating: 4.9, reviews: 310, distance: '0.4 mi', phone: '(555) 330-9941', badge: 'Top Rated' },
+    { name: 'Precision Spray Finishing & Wall Decor', rating: 4.8, reviews: 195, distance: '1.0 mi', phone: '(555) 774-2219', badge: 'Color Consultant' },
+    { name: 'FreshCoat Fast Turnaround Crew', rating: 4.6, reviews: 125, distance: '1.9 mi', phone: '(555) 891-6602', badge: 'Same Day' },
+  ],
+  Mason: [
+    { name: 'Master Bricklayer & Block Masonry', rating: 4.9, reviews: 195, distance: '0.8 mi', phone: '(555) 882-1190', badge: 'Structural Vetted' },
+    { name: 'Stone & Concrete Paver Specialists', rating: 4.7, reviews: 130, distance: '1.6 mi', phone: '(555) 440-6623', badge: 'Foundation Pro' },
+    { name: 'Retaining Wall & Chimney Repairs', rating: 4.6, reviews: 85, distance: '2.7 mi', phone: '(555) 319-5501', badge: 'Licensed' },
+  ],
+  Welder: [
+    { name: 'Certified Mobile Arc & Argon Welder', rating: 4.9, reviews: 215, distance: '0.7 mi', phone: '(555) 662-8819', badge: 'AWS Certified' },
+    { name: 'Wrought Iron Gates & Metal Railings', rating: 4.8, reviews: 140, distance: '1.5 mi', phone: '(555) 901-3342', badge: 'Heavy Steel' },
+    { name: 'Structural Steel Emergency Repairs', rating: 4.6, reviews: 92, distance: '2.6 mi', phone: '(555) 412-7780', badge: '24/7 Mobile' },
+  ],
   Plumber: [
     { name: 'AquaFix Pro', rating: 4.9, reviews: 312, distance: '0.3 mi', phone: '(555) 201-4488', badge: 'Open Now' },
     { name: 'City Pipe Masters', rating: 4.7, reviews: 189, distance: '0.8 mi', phone: '(555) 309-7712', badge: 'Top Rated' },
@@ -1260,6 +1588,26 @@ export const GLOBAL_FALLBACK_PROVIDERS: Record<
     { name: 'VoltEdge Electric', rating: 4.8, reviews: 274, distance: '0.5 mi', phone: '(555) 102-6641', badge: 'Certified' },
     { name: 'BrightSpark Co.', rating: 4.7, reviews: 158, distance: '0.9 mi', phone: '(555) 203-8834', badge: 'Open Now' },
     { name: 'WireWise Services', rating: 4.5, reviews: 88, distance: '1.4 mi', phone: '(555) 307-1195', badge: 'Top Rated' },
+  ],
+  Mechanic: [
+    { name: 'Mobile Diagnostic Auto Mechanic', rating: 4.9, reviews: 295, distance: '0.6 mi', phone: '(555) 771-4401', badge: 'ASE Certified' },
+    { name: 'Brake, Battery & Engine Techs', rating: 4.8, reviews: 180, distance: '1.3 mi', phone: '(555) 990-2218', badge: 'Roadside Pro' },
+    { name: 'Precision Transmission Specialist', rating: 4.6, reviews: 110, distance: '2.3 mi', phone: '(555) 334-9912', badge: 'Top Rated' },
+  ],
+  Roofer: [
+    { name: 'Precision Roof Leak Doctor', rating: 4.9, reviews: 190, distance: '0.8 mi', phone: '(555) 880-1129', badge: 'Waterproof Vetted' },
+    { name: 'Tile, Shingle & Metal Roofing Pro', rating: 4.7, reviews: 125, distance: '1.7 mi', phone: '(555) 441-8830', badge: 'Licensed Roofer' },
+    { name: 'Gutter & Flashing Repair Services', rating: 4.6, reviews: 80, distance: '2.8 mi', phone: '(555) 219-6644', badge: 'Fast Dispatch' },
+  ],
+  'AC Technician': [
+    { name: 'ClimateCool HVAC & Refrigeration', rating: 4.9, reviews: 270, distance: '0.5 mi', phone: '(555) 331-8890', badge: 'EPA Certified' },
+    { name: 'Rapid AC Gas Refill & Compressor Tech', rating: 4.8, reviews: 165, distance: '1.2 mi', phone: '(555) 772-4411', badge: 'Same Day' },
+    { name: 'Home & Office Chiller Services', rating: 4.6, reviews: 95, distance: '2.2 mi', phone: '(555) 904-1188', badge: 'Top Rated' },
+  ],
+  'Generator Tech': [
+    { name: 'Perkins & Diesel Plant Engineers', rating: 4.9, reviews: 185, distance: '0.9 mi', phone: '(555) 661-3320', badge: 'Certified Tech' },
+    { name: 'Backup Power Generator Overhaulers', rating: 4.7, reviews: 115, distance: '1.8 mi', phone: '(555) 884-2291', badge: 'Field Service' },
+    { name: 'Automatic Transfer Switch Specialists', rating: 4.5, reviews: 70, distance: '3.0 mi', phone: '(555) 449-7705', badge: 'Open Now' },
   ],
   Laundry: [
     { name: 'FreshPress Cleaners', rating: 4.9, reviews: 501, distance: '0.2 mi', phone: '(555) 401-3372', badge: 'Open Now' },
@@ -1271,7 +1619,61 @@ export const GLOBAL_FALLBACK_PROVIDERS: Record<
     { name: 'SecureLock Co.', rating: 4.8, reviews: 211, distance: '0.7 mi', phone: '(555) 802-5531', badge: 'Licensed' },
     { name: 'QuickKey Locksmiths', rating: 4.6, reviews: 122, distance: '1.3 mi', phone: '(555) 903-8845', badge: 'Fast Response' },
   ],
+  Cleaner: [
+    { name: 'Spotless Deep Home Cleaning Pro', rating: 4.9, reviews: 340, distance: '0.4 mi', phone: '(555) 552-1109', badge: 'Eco Certified' },
+    { name: 'Post-Construction & Carpet Steam', rating: 4.8, reviews: 210, distance: '1.0 mi', phone: '(555) 778-9932', badge: 'Vetted Maids' },
+    { name: 'Pest Fumigation & Sanitizing Crew', rating: 4.6, reviews: 125, distance: '2.0 mi', phone: '(555) 331-4480', badge: 'Top Rated' },
+  ],
+  Handyman: [
+    { name: 'All-Pro Multi-Trade Handyman', rating: 4.9, reviews: 395, distance: '0.4 mi', phone: '(555) 119-8844', badge: 'Top Rated' },
+    { name: 'Rapid Fixture & Assembly Specialists', rating: 4.8, reviews: 240, distance: '0.9 mi', phone: '(555) 662-3310', badge: 'Same Day' },
+    { name: 'Neighborhood Fixer & Odd Jobs', rating: 4.6, reviews: 130, distance: '1.8 mi', phone: '(555) 904-7722', badge: 'Open Now' },
+  ],
 };
+
+export function detectArtisanTrade(query: string): string {
+  const q = query.toLowerCase();
+  if (/\b(tile|tiler|tiling|marble|granite|terrazzo|porcelain|paver)\b/.test(q)) return 'Tiler';
+  if (/\b(plaster|plasterer|plastering|pop|drywall|gypsum|ceiling|screeding)\b/.test(q)) return 'Plasterer';
+  if (/\b(carpenter|carpentry|wood|woodwork|joiner|cabinet|wardrobe|furniture|joinery)\b/.test(q)) return 'Carpenter';
+  if (/\b(paint|painter|painting|wall\s*paint|decorator|screed)\b/.test(q)) return 'Painter';
+  if (/\b(mason|masonry|brick|bricklayer|block|blocklayer|concrete|stone\s*mason|foundation)\b/.test(q)) return 'Mason';
+  if (/\b(weld|welder|welding|iron|fabricat|metal|ironmonger|gate|burglar\s*proof)\b/.test(q)) return 'Welder';
+  if (/\b(ac|air\s*con|hvac|chiller|cooling|refrigerat)\b/.test(q)) return 'AC Technician';
+  if (/\b(gen|generator|plant|diesel\s*gen|mikano|perkins)\b/.test(q)) return 'Generator Tech';
+  if (/\b(mechanic|auto|car\s*repair|engine|brake|transmission|panel\s*beater)\b/.test(q)) return 'Mechanic';
+  if (/\b(roof|roofer|roofing|gutter|leak\s*roof|aluminum\s*roof|truss)\b/.test(q)) return 'Roofer';
+  if (/\b(clean|cleaner|cleaning|fumigat|pest\s*control|janitor|deep\s*clean)\b/.test(q)) return 'Cleaner';
+  if (/\b(lock|locksmith|key|padlock|deadbolt|safe)\b/.test(q)) return 'Locksmith';
+  if (/\b(laundry|dry\s*clean|wash|washman|ironing)\b/.test(q)) return 'Laundry';
+  if (/\b(plumb|plumber|pipe|drain|leak|water\s*pipe|tap|faucet|borehole|sink)\b/.test(q)) return 'Plumber';
+  if (/\b(electric|electrician|wire|wiring|power|fuse|circuit|solar|inverter)\b/.test(q)) return 'Electrician';
+  if (/\b(handy|handyman|repair|fixer|odd\s*jobs|mounting)\b/.test(q)) return 'Handyman';
+
+  const cleaned = query.trim().replace(/^(find|search|hire|get|need|a|an|the|verified|pro|skilled)\s+/i, '');
+  if (cleaned.length > 2 && cleaned.length < 25) {
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  return 'Handyman';
+}
+
+export function detectCountryInQuery(query: string): string | null {
+  const q = query.toLowerCase();
+  for (const c of ALL_COUNTRIES) {
+    if (q.includes(c.name.toLowerCase()) || q.includes(c.code.toLowerCase())) {
+      return c.code;
+    }
+  }
+  if (/\b(lagos|abuja|ibadan|portharcourt|enugu|kano|nigeria|naija)\b/.test(q)) return 'NG';
+  if (/\b(london|manchester|birmingham|leeds|glasgow|uk|britain|england)\b/.test(q)) return 'GB';
+  if (/\b(new york|san francisco|los angeles|chicago|austin|miami|houston|seattle|usa|united states)\b/.test(q)) return 'US';
+  if (/\b(toronto|vancouver|montreal|calgary|ottawa|canada)\b/.test(q)) return 'CA';
+  if (/\b(paris|berlin|madrid|rome|amsterdam|dublin|europe)\b/.test(q)) return 'DE';
+  if (/\b(accra|kumasi|ghana)\b/.test(q)) return 'GH';
+  if (/\b(nairobi|mombasa|kenya)\b/.test(q)) return 'KE';
+  if (/\b(johannesburg|cape town|durban|south africa)\b/.test(q)) return 'ZA';
+  return null;
+}
 
 export function generateMarketProviders(
   category: string,
@@ -1279,11 +1681,50 @@ export function generateMarketProviders(
   searchQuery = category
 ): MarketProvider[] {
   const cName = getCountryInfo(country).name;
-  const regionalSet = REGIONAL_MARKET_PROVIDERS[country]?.[category];
-  const list = regionalSet ?? GLOBAL_FALLBACK_PROVIDERS[category] ?? GLOBAL_FALLBACK_PROVIDERS.Plumber;
+  const normalizedCategory = detectArtisanTrade(searchQuery || category);
+  const targetCat = TASK_CATEGORIES.includes(category) ? category : normalizedCategory;
+
+  const regionalSet =
+    REGIONAL_MARKET_PROVIDERS[country]?.[targetCat] ||
+    REGIONAL_MARKET_PROVIDERS[country]?.[normalizedCategory];
+
+  const fallbackSet =
+    GLOBAL_FALLBACK_PROVIDERS[targetCat] ||
+    GLOBAL_FALLBACK_PROVIDERS[normalizedCategory];
+
+  // If a completely unique trade was searched that is not in hardcoded lists, synthesize 3 verified artisans for that trade
+  const list =
+    regionalSet ??
+    fallbackSet ??
+    [
+      {
+        name: `${cName} Master ${targetCat} Craftsman`,
+        rating: 4.9,
+        reviews: 215,
+        distance: country === 'US' || country === 'GB' ? '0.6 mi' : '1.2 km',
+        phone: country === 'NG' ? '+234 803 771 9920' : '+1 (555) 392-4410',
+        badge: 'Trade Guild Verified',
+      },
+      {
+        name: `Elite ${targetCat} Precision Services`,
+        rating: 4.8,
+        reviews: 148,
+        distance: country === 'US' || country === 'GB' ? '1.4 mi' : '2.3 km',
+        phone: country === 'NG' ? '+234 812 449 8831' : '+1 (555) 771-8892',
+        badge: 'Identity Screened',
+      },
+      {
+        name: `Local Independent ${targetCat} Pro`,
+        rating: 4.7,
+        reviews: 94,
+        distance: country === 'US' || country === 'GB' ? '2.5 mi' : '3.8 km',
+        phone: country === 'NG' ? '+234 901 332 5540' : '+1 (555) 880-3321',
+        badge: 'Community Vetted',
+      },
+    ];
 
   return list.map((item, index) => {
-    let startingPrice = 30 + index * 15;
+    let startingPrice = 35 + index * 15;
     if (country === 'NG') startingPrice = 8500 + index * 3500;
     else if (country === 'GB') startingPrice = 45 + index * 20;
     else if (country === 'CA') startingPrice = 60 + index * 25;
@@ -1291,15 +1732,15 @@ export function generateMarketProviders(
     else if (country === 'US') startingPrice = 55 + index * 25;
 
     return {
-      id: `${country}-${category}-${index}`,
-      category,
+      id: `${country}-${targetCat}-${index}`,
+      category: targetCat,
       name: searchQuery === category ? item.name : `${cName} · ${item.name}`,
       distance: item.distance || (country === 'US' || country === 'GB' ? `${(0.4 + index * 0.7).toFixed(1)} mi` : `${(0.8 + index * 1.2).toFixed(1)} km`),
       phone: item.phone,
       badge: item.badge,
-      isIdentityVerified: index !== 2,
-      safetyScore: index === 1 ? 96 : index === 2 ? 91 : 99,
-      reportCount: index === 2 ? 1 : 0,
+      isIdentityVerified: true,
+      safetyScore: index === 0 ? 99 : index === 1 ? 98 : 96,
+      reportCount: 0,
       startingPrice,
       rating: item.rating,
       reviews: item.reviews,

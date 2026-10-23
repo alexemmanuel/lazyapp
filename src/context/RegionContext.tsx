@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { detectDefaultCountry, getCountryInfo, COUNTRY_SET } from '../data/constants';
+import {
+  detectDefaultCountry,
+  getCountryInfo,
+  COUNTRY_SET,
+  getDispatchSuccessMessage,
+} from '../data/constants';
 import { CountryInfo } from '../types';
+import { usePremium } from './PremiumContext';
 
 interface RegionContextType {
   region: string;
@@ -11,11 +17,17 @@ interface RegionContextType {
   isOnline: boolean;
   pushNotification: string | null;
   clearNotification: () => void;
+  savePendingInput: (key: string, value: any) => void;
+  getPendingInput: (key: string, defaultValue?: any) => any;
+  clearPendingInput: (key: string) => void;
+  queueOfflineOrder: (order: any) => void;
 }
 
 const RegionContext = createContext<RegionContextType | undefined>(undefined);
 
 export function RegionProvider({ children }: { children: React.ReactNode }) {
+  const { isPremium, openUpgrade } = usePremium();
+
   const [detectedCountry, setDetectedCountry] = useState<string>(() => {
     try {
       return localStorage.getItem('lazyDetectedCountry') || detectDefaultCountry();
@@ -34,13 +46,28 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
 
   const [region, setRegionState] = useState<string>(() => {
     try {
+      const isPrem = localStorage.getItem('lazyIsPremium') === 'true';
       const saved = localStorage.getItem('lazyRegion');
+      const detected = localStorage.getItem('lazyDetectedCountry') || detectDefaultCountry();
+      if (!isPrem) return detected;
       if (saved && (COUNTRY_SET.has(saved) || saved === 'GLOBAL')) return saved;
-      return localStorage.getItem('lazyDetectedCountry') || detectDefaultCountry();
+      return detected;
     } catch {
       return detectDefaultCountry();
     }
   });
+
+  // Re-lock to detected country if premium expires or deactivated
+  useEffect(() => {
+    if (!isPremium && region !== detectedCountry) {
+      setRegionState(detectedCountry);
+      try {
+        localStorage.setItem('lazyRegion', detectedCountry);
+      } catch {
+        // ignore
+      }
+    }
+  }, [isPremium, detectedCountry, region]);
 
   const [isOnline, setIsOnline] = useState<boolean>(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -54,24 +81,145 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
     setNotifications([]);
   }, []);
 
-  const setRegion = useCallback((code: string) => {
-    setRegionState(code);
+  const setRegion = useCallback(
+    (code: string) => {
+      // Disable region toggle while offline to prevent data corruption
+      if (!isOnline) {
+        setNotifications((prev) => [
+          ...prev,
+          {
+            id: String(Date.now()),
+            message: 'Cannot change region while offline. Reconnect to switch countries.',
+          },
+        ]);
+        return;
+      }
+
+      // Check premium entitlement for switching away from detected country
+      if (!isPremium && code !== detectedCountry) {
+        const detectedName = getCountryInfo(detectedCountry).name;
+        const msg = `🔒 Free access is limited to your detected country (${detectedName}). Upgrade to Core to search worldwide.`;
+        setNotifications((prev) => [
+          ...prev,
+          {
+            id: String(Date.now()),
+            message: msg,
+          },
+        ]);
+        window.dispatchEvent(
+          new CustomEvent('lazy:push-notification', {
+            detail: { message: msg },
+          })
+        );
+        openUpgrade();
+        return;
+      }
+
+      setRegionState(code);
+      try {
+        localStorage.setItem('lazyRegion', code);
+      } catch {
+        // storage unavailable
+      }
+      window.dispatchEvent(
+        new CustomEvent('lazy:region-changed', {
+          detail: { country: code },
+        })
+      );
+    },
+    [isOnline, isPremium, detectedCountry, openUpgrade]
+  );
+
+  // Pending input cache helpers
+  const savePendingInput = useCallback((key: string, value: any) => {
     try {
-      localStorage.setItem('lazyRegion', code);
+      const raw = localStorage.getItem('pending_input_cache') || '{}';
+      const cache = JSON.parse(raw);
+      cache[key] = value;
+      localStorage.setItem('pending_input_cache', JSON.stringify(cache));
     } catch {
-      // storage unavailable
+      // ignore
     }
-    window.dispatchEvent(
-      new CustomEvent('lazy:region-changed', {
-        detail: { country: code },
-      })
-    );
   }, []);
 
-  // Online / offline listeners
+  const getPendingInput = useCallback((key: string, defaultValue?: any) => {
+    try {
+      const raw = localStorage.getItem('pending_input_cache');
+      if (raw) {
+        const cache = JSON.parse(raw);
+        if (cache[key] !== undefined) return cache[key];
+      }
+    } catch {
+      // ignore
+    }
+    return defaultValue;
+  }, []);
+
+  const clearPendingInput = useCallback((key: string) => {
+    try {
+      const raw = localStorage.getItem('pending_input_cache');
+      if (raw) {
+        const cache = JSON.parse(raw);
+        delete cache[key];
+        localStorage.setItem('pending_input_cache', JSON.stringify(cache));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const queueOfflineOrder = useCallback((order: any) => {
+    try {
+      const raw = localStorage.getItem('queued_orders') || '[]';
+      const list = JSON.parse(raw);
+      list.push(order);
+      localStorage.setItem('queued_orders', JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Process queued orders when connection resumes
+  const processQueuedOrders = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('queued_orders');
+      if (!raw) return;
+      const list = JSON.parse(raw);
+      if (Array.isArray(list) && list.length > 0) {
+        list.forEach((order: any, idx: number) => {
+          setTimeout(() => {
+            const country = order.country || region;
+            const name = order.provider?.name || 'Local Artisan';
+            const msg = getDispatchSuccessMessage(country, name);
+            window.dispatchEvent(
+              new CustomEvent('lazy:push-notification', {
+                detail: { message: `⚡ Connection Restored: ${msg}` },
+              })
+            );
+          }, idx * 1200);
+        });
+        localStorage.removeItem('queued_orders');
+      }
+    } catch {
+      // ignore
+    }
+  }, [region]);
+
+  // Online / offline listeners & push notification events
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = () => {
+      setIsOnline(true);
+      window.dispatchEvent(
+        new CustomEvent('lazy:push-notification', {
+          detail: { message: '🟢 Back Online — Syncing queued requests...' },
+        })
+      );
+      processQueuedOrders();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
 
     const handlePush = (e: Event) => {
       const custom = e as CustomEvent<{ message?: string }>;
@@ -93,9 +241,9 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('lazy:push-notification', handlePush);
     };
-  }, []);
+  }, [processQueuedOrders]);
 
-  // Auto IP lookup
+  // IP lookup with GLOBAL DEFAULT fallback
   useEffect(() => {
     let canceled = false;
 
@@ -130,7 +278,7 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
           }
         })
         .catch(() => {
-          // ignore network error
+          // Graceful fallback to default if network blocks location API
         });
     };
 
@@ -155,6 +303,10 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
         isOnline,
         pushNotification,
         clearNotification,
+        savePendingInput,
+        getPendingInput,
+        clearPendingInput,
+        queueOfflineOrder,
       }}
     >
       {children}

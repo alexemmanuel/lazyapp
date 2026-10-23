@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePremium } from '../context/PremiumContext';
 import { useRegion } from '../context/RegionContext';
 import {
@@ -6,14 +6,18 @@ import {
   CATEGORY_CONFIG,
   DEFAULT_CONTACTS,
   generateMarketProviders,
+  detectArtisanTrade,
+  detectCountryInQuery,
   formatCurrency,
   getIdentityVerificationBadge,
   getDispatchSuccessMessage,
   getArtisanSearchLoadingText,
   formatGoogleCalendarUrl,
+  ALL_COUNTRIES,
 } from '../data/constants';
 import { ContactItem, MarketProvider, ScheduleItem, TimerItem, ReportTarget } from '../types';
 import { ReportListingModal } from '../components/ReportListingModal';
+import { VoiceButton } from '../components/VoiceButton';
 import {
   Wrench,
   Calendar,
@@ -39,17 +43,23 @@ import {
   Mic,
   Clock,
   Check,
+  Lock,
+  ChevronDown,
 } from 'lucide-react';
 
 export function TaskPage() {
   const { isPremium, openUpgrade } = usePremium();
-  const { region, isOnline, countryInfo } = useRegion();
+  const { region, setRegion, isOnline, countryInfo, detectedCountry } = useRegion();
 
   const [activeTab, setActiveTab] = useState<'help' | 'schedule' | 'timers'>('help');
 
   // Help Sub-states
   const [source, setSource] = useState<'circle' | 'market'>('circle');
-  const [category, setCategory] = useState<string>('Plumber');
+  const [category, setCategory] = useState<string>('Carpenter');
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+  const [countryFilterText, setCountryFilterText] = useState('');
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
+
   const [searchQuery, setSearchQuery] = useState(() => {
     try {
       return localStorage.getItem('taskSearch') || '';
@@ -175,15 +185,29 @@ export function TaskPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Click outside country picker
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(e.target as Node)) {
+        setCountryDropdownOpen(false);
+      }
+    };
+    if (countryDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [countryDropdownOpen]);
+
   // Listen for AI task requests
   useEffect(() => {
     const handleAiTask = (e: Event) => {
       const custom = e as CustomEvent<{ service?: string }>;
       const service = custom.detail?.service;
       if (service) {
-        setCategory(service);
+        const detected = detectArtisanTrade(service);
+        setCategory(detected);
         setSource('market');
-        runMarketSearch(service);
+        runMarketSearch(detected, service);
       }
     };
 
@@ -191,9 +215,10 @@ export function TaskPage() {
       const req = localStorage.getItem('lazyai_task_request');
       if (req) {
         localStorage.removeItem('lazyai_task_request');
-        setCategory(req);
+        const detected = detectArtisanTrade(req);
+        setCategory(detected);
         setSource('market');
-        runMarketSearch(req);
+        runMarketSearch(detected, req);
       }
     } catch {
       // ignore
@@ -203,27 +228,56 @@ export function TaskPage() {
     return () => window.removeEventListener('lazyai:task', handleAiTask);
   }, [region]);
 
-  const runMarketSearch = (cat: string = category) => {
+  const runMarketSearch = (cat: string = category, queryText: string = searchQuery) => {
+    const detectedTrade = detectArtisanTrade(queryText.trim() || cat);
+    const targetCat = TASK_CATEGORIES.includes(cat) && !queryText.trim() ? cat : detectedTrade;
+    setCategory(targetCat);
     setMarketLoading(true);
     setMarketProviders([]);
     setTimeout(() => {
-      const results = generateMarketProviders(cat, region, searchQuery.trim() || cat);
+      const results = generateMarketProviders(targetCat, region, queryText.trim() || targetCat);
       setMarketProviders(results);
       setMarketLoading(false);
-    }, 900);
+    }, 700);
+  };
+
+  const handleSearchSubmit = (rawQuery: string) => {
+    const clean = rawQuery.trim();
+    if (!clean) return;
+
+    // Check if user is attempting to search another country/region
+    const targetCountry = detectCountryInQuery(clean);
+    if (targetCountry && targetCountry !== region) {
+      if (!isPremium && targetCountry !== detectedCountry) {
+        const msg = `🔒 Free access is locked to your present country (${countryInfo.name}). Upgrade to Core to search artisans in other regions.`;
+        window.dispatchEvent(
+          new CustomEvent('lazy:push-notification', { detail: { message: msg } })
+        );
+        openUpgrade();
+        return;
+      } else {
+        setRegion(targetCountry);
+      }
+    }
+
+    const detectedTrade = detectArtisanTrade(clean);
+    setCategory(detectedTrade);
+    setSource('market');
+    runMarketSearch(detectedTrade, clean);
   };
 
   const handleSourceChange = (newSource: 'circle' | 'market') => {
     setSource(newSource);
     if (newSource === 'market' && marketProviders.length === 0) {
-      runMarketSearch(category);
+      runMarketSearch(category, searchQuery);
     }
   };
 
   const handleCategoryChange = (cat: string) => {
     setCategory(cat);
+    setSearchQuery('');
     if (source === 'market') {
-      runMarketSearch(cat);
+      runMarketSearch(cat, '');
     }
   };
 
@@ -271,6 +325,27 @@ export function TaskPage() {
 
   const handleDeleteContact = (id: number | string) => {
     setContacts((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const [brainDump, setBrainDump] = useState('');
+
+  const handleQuickAddBrainDump = (text: string = brainDump) => {
+    const clean = text.trim();
+    if (!clean) return;
+    const item: ScheduleItem = {
+      id: crypto.randomUUID(),
+      title: clean,
+      dateTime: new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 16),
+      category,
+      completed: false,
+    };
+    setSchedules((prev) => [item, ...prev]);
+    setBrainDump('');
+    window.dispatchEvent(
+      new CustomEvent('lazy:push-notification', {
+        detail: { message: `📅 Added to schedule: "${clean}"` },
+      })
+    );
   };
 
   // Schedule CRUD
@@ -369,49 +444,144 @@ export function TaskPage() {
           </div>
         </div>
 
-        {/* Top 3 Sub-tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl border border-border/50 bg-card/60">
-          <button
-            type="button"
-            onClick={() => setActiveTab('help')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'help'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Wrench className="h-3.5 w-3.5" />
-            Get Help
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('schedule')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'schedule'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Calendar className="h-3.5 w-3.5" />
-            Schedule
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('timers')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'timers'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Timer className="h-3.5 w-3.5" />
-            Timers
-            {!isPremium && (
-              <span className="px-1 rounded-full bg-violet-500/20 text-[9px] text-violet-300 border border-violet-500/30 font-bold">
-                PRO
-              </span>
+        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+          {/* Country Selector Dropdown */}
+          <div className="relative" ref={countryDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setCountryDropdownOpen((p) => !p)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border border-border/50 bg-card/70 hover:bg-muted/40 transition-colors text-xs font-semibold text-foreground shadow-sm cursor-pointer"
+            >
+              <span className="text-base">{countryInfo.flag}</span>
+              <span className="truncate max-w-[90px]">{countryInfo.name}</span>
+              {!isPremium ? (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-500/10 text-[9px] text-violet-300 font-bold border border-violet-500/20">
+                  <Lock className="h-2.5 w-2.5 text-violet-400" />
+                  <span>Free</span>
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-[9px] text-emerald-300 font-bold border border-emerald-500/20">
+                  Worldwide
+                </span>
+              )}
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </button>
+
+            {countryDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-border/60 bg-card/95 p-2.5 shadow-2xl shadow-black/60 backdrop-blur-xl z-50 animate-in zoom-in-95 duration-150">
+                {!isPremium && (
+                  <div className="mb-2 p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-[11px] text-violet-300 flex items-start gap-1.5">
+                    <Lock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-violet-400" />
+                    <span>
+                      Free tier is locked to your detected country (<strong>{detectedCountry}</strong>). Upgrade to Core to hire verified artisans worldwide.
+                    </span>
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  placeholder="Search country..."
+                  value={countryFilterText}
+                  onChange={(e) => setCountryFilterText(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl bg-muted/40 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none mb-2 border border-border/40"
+                />
+                <div className="max-h-56 overflow-y-auto space-y-1">
+                  {ALL_COUNTRIES.filter(
+                    (c) =>
+                      c.name.toLowerCase().includes(countryFilterText.toLowerCase()) ||
+                      c.code.toLowerCase().includes(countryFilterText.toLowerCase())
+                  ).map((c) => {
+                    const isLocked = !isPremium && c.code !== detectedCountry;
+                    const isCurrent = region === c.code;
+
+                    return (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => {
+                          if (isLocked) {
+                            setCountryDropdownOpen(false);
+                            setRegion(c.code);
+                            return;
+                          }
+                          setRegion(c.code);
+                          setCountryDropdownOpen(false);
+                          if (source === 'market') {
+                            runMarketSearch(category, searchQuery);
+                          }
+                        }}
+                        className={`flex items-center justify-between w-full px-3 py-2 rounded-xl text-xs text-left transition-colors ${
+                          isCurrent
+                            ? 'bg-violet-500/15 text-violet-300 font-bold'
+                            : isLocked
+                            ? 'text-foreground/50 hover:bg-muted/30 cursor-pointer'
+                            : 'text-foreground/80 hover:bg-muted/40'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 truncate max-w-[170px]">
+                          <span>{c.flag}</span>
+                          <span className="truncate">{c.name}</span>
+                        </span>
+                        {isLocked ? (
+                          <span className="flex items-center gap-1 text-[9px] text-violet-400 font-bold bg-violet-500/10 px-1.5 py-0.5 rounded border border-violet-500/20">
+                            <Lock className="h-2.5 w-2.5" />
+                            <span>PRO</span>
+                          </span>
+                        ) : isCurrent ? (
+                          <span className="text-[10px] text-violet-400 font-bold">Active</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
-          </button>
+          </div>
+
+          {/* Top 3 Sub-tabs */}
+          <div className="flex items-center gap-1.5 p-1 rounded-2xl border border-border/50 bg-card/60">
+            <button
+              type="button"
+              onClick={() => setActiveTab('help')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'help'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              Get Help
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('schedule')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'schedule'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              Schedule
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('timers')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'timers'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Timer className="h-3.5 w-3.5" />
+              Timers
+              {!isPremium && (
+                <span className="px-1 rounded-full bg-violet-500/20 text-[9px] text-violet-300 border border-violet-500/30 font-bold">
+                  PRO
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -420,57 +590,40 @@ export function TaskPage() {
          ========================================================================= */}
       {activeTab === 'help' && (
         <div className="space-y-6">
-          {/* Source Switcher: My Circle vs Public Market */}
-          <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-border/50 bg-card/70 p-1.5 max-w-md mx-auto">
-            <button
-              type="button"
-              onClick={() => handleSourceChange('circle')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
-                source === 'circle'
-                  ? 'bg-rose-500/20 border border-rose-500/30 text-rose-300 shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Heart className="h-3.5 w-3.5 fill-rose-500/40" />
-              My Circle ❤️
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSourceChange('market')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
-                source === 'market'
-                  ? 'bg-sky-500/20 border border-sky-500/30 text-sky-300 shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Globe className="h-3.5 w-3.5" />
-              Public Market 🌍
-            </button>
-          </div>
-
-          {/* Search workmanship box */}
-          <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4 flex items-center gap-3">
+          {/* Search workmanship box with VoiceButton */}
+          <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-3 sm:p-4 flex items-center gap-3 shadow-md shadow-violet-500/5">
             <Search className="h-4 w-4 text-violet-400 flex-shrink-0" />
             <input
               type="text"
-              placeholder="Search for any workmanship (e.g. tiler, painter, carpenter, cleaner...)"
+              placeholder="Search any skill (e.g. tiler, carpenter, plasterer, painter, mason, welder...)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  setSource('market');
-                  runMarketSearch(category);
+                  e.preventDefault();
+                  handleSearchSubmit(searchQuery);
                 }
               }}
               className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
             />
-            <button
-              type="button"
-              aria-label="Speak service search"
-              className="text-muted-foreground hover:text-violet-400 p-1"
-            >
-              <Mic className="h-4 w-4" />
-            </button>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => handleSearchSubmit(searchQuery)}
+                className="px-2.5 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-[11px] font-bold cursor-pointer transition-all"
+              >
+                Find Pro
+              </button>
+            )}
+            <VoiceButton
+              onTranscript={(transcript) => {
+                setSearchQuery(transcript);
+                handleSearchSubmit(transcript);
+              }}
+              size="sm"
+              title="Speak workmanship search (e.g. 'Tiler', 'Carpenter', 'POP Plasterer')"
+              className="hover:bg-violet-500/20 text-violet-300"
+            />
           </div>
 
           {/* Categories Horizontal Carousel */}
@@ -495,6 +648,36 @@ export function TaskPage() {
                 </button>
               );
             })}
+          </div>
+
+          {/* The "Explore Beyond My Circle" Toggle directly below category selector */}
+          <div className="flex items-center justify-center pt-1">
+            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-border/50 bg-card/80 p-1.5 w-full max-w-md shadow-sm">
+              <button
+                type="button"
+                onClick={() => handleSourceChange('circle')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+                  source === 'circle'
+                    ? 'bg-rose-500/20 border border-rose-500/30 text-rose-300 shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Heart className="h-3.5 w-3.5 fill-rose-500/40" />
+                My Circle ❤️
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSourceChange('market')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+                  source === 'market'
+                    ? 'bg-sky-500/20 border border-sky-500/30 text-sky-300 shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Globe className="h-3.5 w-3.5" />
+                Public Market 🌍
+              </button>
+            </div>
           </div>
 
           {/* SOURCE: MY CIRCLE */}
@@ -550,50 +733,67 @@ export function TaskPage() {
                   {filteredCircle.map((contact) => (
                     <div
                       key={contact.id}
-                      className="p-4 rounded-2xl border border-border/50 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      className="p-4 rounded-2xl border border-border/50 bg-card flex flex-col gap-3"
                     >
-                      <div className="flex items-center gap-3.5">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 font-display font-bold text-sm">
-                          {contact.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-display text-sm font-bold text-foreground">
-                              {contact.name}
-                            </h4>
-                            <span className="flex h-2 w-2 rounded-full bg-emerald-400" title="Personal contact on file" />
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3.5">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 font-display font-bold text-sm">
+                            {contact.name.charAt(0)}
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            {contact.phone}
-                            {contact.notes && ` · ${contact.notes}`}
-                          </p>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-display text-sm font-bold text-foreground">
+                                {contact.name}
+                              </h4>
+                              <span className="flex h-2 w-2 rounded-full bg-emerald-400" title="Personal contact on file" />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {contact.phone}
+                              {contact.notes && ` · ${contact.notes}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => setEditContact(contact)}
+                            aria-label="Edit provider"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/40 text-muted-foreground hover:bg-muted"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteContact(contact.id)}
+                            aria-label="Delete provider"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/40 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                          <a
+                            href={`tel:${contact.phone.replace(/\D/g, '')}`}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-500/20"
+                          >
+                            <Phone className="h-3.5 w-3.5" />
+                            Call Now
+                          </a>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                      {/* One-Tap Hire Alternative Routing */}
+                      <div className="pt-2.5 border-t border-border/30 flex items-center justify-between">
                         <button
                           type="button"
-                          onClick={() => setEditContact(contact)}
-                          aria-label="Edit provider"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/40 text-muted-foreground hover:bg-muted"
+                          onClick={() => {
+                            setCategory(contact.category);
+                            setSource('market');
+                            runMarketSearch(contact.category);
+                          }}
+                          className="text-[11px] font-medium text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1.5 transition-colors cursor-pointer"
                         >
-                          <Edit2 className="h-3.5 w-3.5" />
+                          <span>Regular provider unavailable? Find a trusted alternative 🔍</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteContact(contact.id)}
-                          aria-label="Delete provider"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/40 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                        <a
-                          href={`tel:${contact.phone.replace(/\D/g, '')}`}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-500/20"
-                        >
-                          <Phone className="h-3.5 w-3.5" />
-                          Call Now
-                        </a>
                       </div>
                     </div>
                   ))}
@@ -605,25 +805,63 @@ export function TaskPage() {
           {/* SOURCE: PUBLIC MARKET */}
           {source === 'market' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <h3 className="font-display text-sm font-bold text-foreground">
-                    Verified {category} Artisans Near You
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-sm font-bold text-foreground">
+                      Verified {category} Artisans in {countryInfo.name}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-300">
+                      Vetted
+                    </span>
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Vetted via {countryInfo.name} background databases.
+                    Vetted via {countryInfo.name} trade licensing and national identity checks.
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => runMarketSearch(category)}
-                  className="text-xs font-semibold text-violet-400 hover:text-violet-300 flex items-center gap-1"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  {!isPremium ? (
+                    <button
+                      type="button"
+                      onClick={openUpgrade}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-500/10 border border-violet-500/25 text-[11px] font-bold text-violet-300 hover:bg-violet-500/20 transition-all cursor-pointer"
+                    >
+                      <Lock className="h-3 w-3 text-violet-400" />
+                      <span>Search Other Countries</span>
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                      <Globe className="h-3 w-3" />
+                      <span>Worldwide Access Active</span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => runMarketSearch(category, searchQuery)}
+                    className="text-xs font-semibold text-violet-400 hover:text-violet-300 flex items-center gap-1"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Refresh
+                  </button>
+                </div>
               </div>
+
+              {!isPremium && (
+                <div className="px-3.5 py-2 rounded-xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>{countryInfo.flag}</span>
+                    <span>Free tier is locked to your current location (<strong>{countryInfo.name}</strong>).</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={openUpgrade}
+                    className="text-violet-400 hover:text-violet-300 font-bold underline cursor-pointer"
+                  >
+                    Unlock Worldwide
+                  </button>
+                </div>
+              )}
 
               {marketLoading ? (
                 <div className="p-8 rounded-3xl border border-sky-500/20 bg-card/60 text-center animate-pulse-soft">
@@ -738,6 +976,49 @@ export function TaskPage() {
               <CalendarPlus className="h-3.5 w-3.5" />
               Add Errand
             </button>
+          </div>
+
+          {/* Schedule Brain-Dump Voice Textarea */}
+          <div className="p-4 rounded-3xl border border-amber-500/25 bg-card/90 shadow-xl shadow-black/20 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <span>⚡ Schedule Brain-Dump</span>
+                <span className="text-[10px] text-muted-foreground font-normal">(Hands-free voice or type)</span>
+              </label>
+            </div>
+            <div className="flex items-stretch gap-2.5">
+              <textarea
+                rows={2}
+                placeholder="Speak or type errands, times, or appointments (e.g. Call electrician at 3pm, Pick up fresh laundry tomorrow)..."
+                value={brainDump}
+                onChange={(e) => setBrainDump(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleQuickAddBrainDump();
+                  }
+                }}
+                className="flex-1 p-3 rounded-2xl bg-muted/30 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-amber-500/50 resize-none"
+              />
+              <div className="flex flex-col gap-1.5 justify-between">
+                <VoiceButton
+                  onTranscript={(transcript) => {
+                    setBrainDump((prev) => (prev ? `${prev} ${transcript}` : transcript));
+                  }}
+                  size="md"
+                  title="Voice dictation for Schedule Brain-Dump"
+                  className="bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25 flex-1"
+                />
+                <button
+                  type="button"
+                  disabled={!brainDump.trim()}
+                  onClick={() => handleQuickAddBrainDump()}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center justify-center cursor-pointer"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-3">

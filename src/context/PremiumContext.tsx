@@ -3,6 +3,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 interface PremiumContextType {
   isPremium: boolean;
   searchCount: number;
+  creditsRemaining: number;
+  creditsExhausted: boolean;
   upgradeOpen: boolean;
   togglePremium: () => void;
   openUpgrade: () => void;
@@ -21,7 +23,14 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     }
   });
 
-  const [searchCount, setSearchCount] = useState<number>(0);
+  const [searchCount, setSearchCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('lazySearchCount');
+      return saved ? parseInt(saved, 10) || 0 : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [upgradeOpen, setUpgradeOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -31,6 +40,14 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       // storage unavailable
     }
   }, [isPremium]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('lazySearchCount', String(searchCount));
+    } catch {
+      // ignore
+    }
+  }, [searchCount]);
 
   const togglePremium = useCallback(() => {
     setIsPremium((prev) => !prev);
@@ -43,6 +60,9 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const closeUpgrade = useCallback(() => {
     setUpgradeOpen(false);
   }, []);
+
+  const creditsRemaining = isPremium ? 9999 : Math.max(0, 3 - searchCount);
+  const creditsExhausted = !isPremium && searchCount >= 3;
 
   const trySearch = useCallback(() => {
     if (isPremium) return true;
@@ -59,6 +79,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       value={{
         isPremium,
         searchCount,
+        creditsRemaining,
+        creditsExhausted,
         upgradeOpen,
         togglePremium,
         openUpgrade,

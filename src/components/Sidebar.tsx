@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, Link } from 'wouter';
 import { usePremium } from '../context/PremiumContext';
 import { useRegion } from '../context/RegionContext';
@@ -10,7 +10,9 @@ import {
   WifiOff,
   Globe,
   ChevronDown,
+  Lock,
 } from 'lucide-react';
+import { getLocationBadgeText, ALL_COUNTRIES } from '../data/constants';
 
 export const NAV_ITEMS = [
   {
@@ -51,12 +53,30 @@ export const NAV_ITEMS = [
 export function Sidebar() {
   const [location] = useLocation();
   const { isPremium, openUpgrade } = usePremium();
-  const { countryInfo, region } = useRegion();
+  const { countryInfo, region, setRegion, isOnline, detectedCountry } = useRegion();
+
+  const [mobileRegionOpen, setMobileRegionOpen] = useState(false);
+  const [desktopRegionOpen, setDesktopRegionOpen] = useState(false);
+  const mobileRef = useRef<HTMLDivElement>(null);
+  const desktopRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (mobileRef.current && !mobileRef.current.contains(e.target as Node)) {
+        setMobileRegionOpen(false);
+      }
+      if (desktopRef.current && !desktopRef.current.contains(e.target as Node)) {
+        setDesktopRegionOpen(false);
+      }
+    };
+    if (mobileRegionOpen || desktopRegionOpen) document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [mobileRegionOpen, desktopRegionOpen]);
 
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-72 border-r border-border bg-sidebar flex-shrink-0 flex-col py-7 transition-all duration-300 relative overflow-hidden">
+      <aside className="hidden md:flex w-72 border-r border-border bg-sidebar flex-shrink-0 flex-col py-7 transition-all duration-300 relative">
         {/* Glow accent */}
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-violet-600/10 via-transparent to-transparent pointer-events-none" />
 
@@ -88,19 +108,74 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Country status pill */}
-        <div className="px-6 mb-6">
-          <div className="flex items-center justify-between p-2.5 rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-base">{countryInfo.flag}</span>
-              <span className="font-medium text-foreground truncate max-w-[130px]">
+        {/* Interactive Location Pin Badge with Country Selector */}
+        <div className="px-6 mb-6 relative" ref={desktopRef}>
+          <button
+            type="button"
+            disabled={!isOnline}
+            onClick={() => setDesktopRegionOpen((p) => !p)}
+            className="w-full flex items-center justify-between p-2.5 rounded-2xl border border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 transition-colors text-xs text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <span className="font-bold text-violet-300">
+                {getLocationBadgeText(region)}
+              </span>
+              <span className="text-[11px] text-muted-foreground truncate max-w-[90px]">
                 {countryInfo.name}
               </span>
             </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
-              {region}
-            </span>
-          </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {!isPremium && <Lock className="h-3 w-3 text-violet-400" />}
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </div>
+          </button>
+
+          {desktopRegionOpen && (
+            <div className="absolute left-6 right-6 top-full mt-2 rounded-2xl border border-border/60 bg-card/95 p-2 shadow-2xl z-50 max-h-60 overflow-y-auto backdrop-blur-xl animate-in zoom-in-95 duration-150">
+              {!isPremium && (
+                <div className="p-2 mb-2 rounded-xl bg-violet-500/10 border border-violet-500/20 text-[10px] text-violet-300 flex items-start gap-1.5 leading-tight">
+                  <Lock className="h-3 w-3 mt-0.5 flex-shrink-0 text-violet-400" />
+                  <span>
+                    Free tier is locked to your detected country (<strong>{detectedCountry}</strong>). Upgrade to Core to switch countries.
+                  </span>
+                </div>
+              )}
+              {ALL_COUNTRIES.slice(0, 20).map((c) => {
+                const isLocked = !isPremium && c.code !== detectedCountry;
+                const isCurrent = region === c.code;
+                return (
+                  <button
+                    key={c.code}
+                    type="button"
+                    onClick={() => {
+                      setRegion(c.code);
+                      setDesktopRegionOpen(false);
+                    }}
+                    className={`flex items-center justify-between w-full px-2.5 py-1.5 rounded-xl text-xs ${
+                      isCurrent
+                        ? 'bg-violet-500/20 text-violet-300 font-bold'
+                        : isLocked
+                        ? 'text-foreground/50 hover:bg-muted/30 cursor-pointer'
+                        : 'text-foreground/80 hover:bg-muted/40'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 truncate max-w-[140px]">
+                      <span>{c.flag}</span>
+                      <span className="truncate">{c.name}</span>
+                    </span>
+                    {isLocked ? (
+                      <span className="flex items-center gap-0.5 text-[9px] text-violet-400 font-bold">
+                        <Lock className="h-2.5 w-2.5" />
+                        <span>PRO</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">{c.code}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Navigation list */}
@@ -179,17 +254,81 @@ export function Sidebar() {
           <span className="font-display text-base font-bold text-foreground">
             Lazy
           </span>
-          <span className="text-xs">{countryInfo.flag}</span>
+
+          {/* Subtle Location Pin Badge */}
+          <span className="text-[11px] font-bold text-violet-300 ml-1 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20">
+            {getLocationBadgeText(region)}
+          </span>
         </div>
 
-        <button
-          type="button"
-          onClick={openUpgrade}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/15 text-[11px] font-bold text-violet-300"
-        >
-          <Sparkles className="h-3 w-3" />
-          {isPremium ? 'PRO ACTIVE' : 'UPGRADE'}
-        </button>
+        <div className="flex items-center gap-2" ref={mobileRef}>
+          {/* Change Region Mobile Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              disabled={!isOnline}
+              onClick={() => setMobileRegionOpen((p) => !p)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg border border-border/50 text-[10px] font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <Globe className="h-3 w-3" />
+              <span>Region</span>
+              <ChevronDown className="h-2.5 w-2.5" />
+            </button>
+
+            {mobileRegionOpen && (
+              <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border/60 bg-card/95 p-1.5 shadow-2xl z-50 max-h-56 overflow-y-auto">
+                {!isPremium && (
+                  <div className="p-1.5 mb-1 rounded-lg bg-violet-500/10 text-[10px] text-violet-300 flex items-center gap-1">
+                    <Lock className="h-3 w-3 text-violet-400 flex-shrink-0" />
+                    <span>Free locked to {detectedCountry}</span>
+                  </div>
+                )}
+                {ALL_COUNTRIES.slice(0, 15).map((c) => {
+                  const isLocked = !isPremium && c.code !== detectedCountry;
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => {
+                        setRegion(c.code);
+                        setMobileRegionOpen(false);
+                      }}
+                      className={`flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg text-[11px] ${
+                        region === c.code
+                          ? 'bg-violet-500/20 text-violet-300 font-bold'
+                          : isLocked
+                          ? 'text-foreground/50 hover:bg-muted/30 cursor-pointer'
+                          : 'text-foreground/80 hover:bg-muted/40'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 truncate max-w-[140px]">
+                        <span>{c.flag}</span>
+                        <span className="truncate">{c.name}</span>
+                      </span>
+                      {isLocked ? (
+                        <span className="flex items-center gap-0.5 text-[9px] text-violet-400 font-bold">
+                          <Lock className="h-2.5 w-2.5" />
+                          <span>PRO</span>
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-muted-foreground">{c.code}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={openUpgrade}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-violet-500/30 bg-violet-500/15 text-[10px] font-bold text-violet-300 cursor-pointer"
+          >
+            <Sparkles className="h-3 w-3" />
+            {isPremium ? 'PRO' : 'UPGRADE'}
+          </button>
+        </div>
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
@@ -205,7 +344,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all ${
+              className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all cursor-pointer ${
                 isActive
                   ? `${item.activeColor} font-semibold scale-105`
                   : 'text-muted-foreground hover:text-foreground'

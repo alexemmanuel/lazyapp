@@ -23,6 +23,8 @@ export interface ServiceItem {
   reportCount?: number;
 }
 
+export type OccupancyStatus = 'available' | 'few_left' | 'filled_up';
+
 export interface ApartmentItem {
   id: string;
   platform: string;
@@ -39,6 +41,9 @@ export interface ApartmentItem {
   color: string;
   textColor: string;
   borderColor: string;
+  occupancyStatus: OccupancyStatus;
+  availableUnits: number;
+  occupancyLabel: string;
 }
 
 export interface Recipe {
@@ -105,6 +110,8 @@ export interface LazyAiMessage {
     platform: string;
     price: number;
     city: string;
+    occupancyStatus?: OccupancyStatus;
+    occupancyLabel?: string;
   }[];
   provider?: {
     name: string;

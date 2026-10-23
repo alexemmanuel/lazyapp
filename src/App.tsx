@@ -74,8 +74,8 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <RegionProvider>
-      <PremiumProvider>
+    <PremiumProvider>
+      <RegionProvider>
         <Layout>
           <Switch>
             <Route path="/" component={() => <Redirect to="/compare" />} />
@@ -85,7 +85,7 @@ export default function App() {
             <Route component={() => <Redirect to="/compare" />} />
           </Switch>
         </Layout>
-      </PremiumProvider>
-    </RegionProvider>
+      </RegionProvider>
+    </PremiumProvider>
   );
 }

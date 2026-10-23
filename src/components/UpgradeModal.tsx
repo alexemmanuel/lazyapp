@@ -4,20 +4,20 @@ import { Sparkles, Check, X, ShieldCheck } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const FREE_PERKS = [
+  'Locked to your detected country',
   '3 ingredients per recipe',
   '3 searches per day',
   'Manual calendar sync',
-  'Basic service routing',
   'My Circle contacts',
 ];
 
 const PRO_PERKS = [
+  'Search other countries & regions worldwide',
+  'Public Market: All verified hand skills',
   '6 ingredients per recipe',
   'Unlimited searches',
   'Live countdown timers',
-  'Safe apartment sorting',
-  'Auto Google Calendar sync',
-  'Priority results ranking',
+  'Safe apartment sorting & verified badges',
 ];
 
 export function UpgradeModal() {
@@ -69,10 +69,10 @@ export function UpgradeModal() {
           </div>
           <div>
             <h2 className="font-display text-xl font-bold text-foreground">
-              Ultra Lazy Pro
+              Ultra Lazy Core / Pro
             </h2>
             <p className="text-xs text-muted-foreground">
-              Maximum speed, zero effort.
+              Maximum speed, unlimited searches, zero effort.
             </p>
           </div>
         </div>
@@ -80,7 +80,7 @@ export function UpgradeModal() {
         <div className="grid sm:grid-cols-2 gap-3.5 my-6">
           <div className="rounded-2xl border border-border/40 bg-muted/20 p-4">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Free Plan
+              Free Tier
             </span>
             <ul className="mt-3 space-y-2 text-xs text-muted-foreground/80">
               {FREE_PERKS.map((perk) => (
@@ -94,10 +94,10 @@ export function UpgradeModal() {
 
           <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4 relative overflow-hidden">
             <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-violet-500/20 px-2 py-0.5 text-[9px] font-bold text-violet-300 border border-violet-500/30">
-              PRO
+              CORE
             </div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-violet-300">
-              Ultra Lazy Pro
+              Core / Pro Plan
             </span>
             <ul className="mt-3 space-y-2 text-xs text-foreground/90 font-medium">
               {PRO_PERKS.map((perk) => (
@@ -119,7 +119,7 @@ export function UpgradeModal() {
           }`}
         >
           <Sparkles className="h-4 w-4" />
-          {isPremium ? 'Deactivate Pro (Dev)' : 'Activate Ultra Lazy Pro'}
+          {isPremium ? 'Deactivate Core / Pro (Dev)' : 'Upgrade to Core (Activate Pro)'}
         </button>
 
         <p className="mt-3 text-center text-[11px] text-muted-foreground/50 flex items-center justify-center gap-1">
